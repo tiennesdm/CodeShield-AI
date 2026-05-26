@@ -79,6 +79,13 @@ class GitleaksParser:
     ) -> Optional[Vulnerability]:
         """Parse a single Gitleaks finding."""
         file_path = finding.get("File", "")
+        
+        # Ignore dependency lock files for secret leaks, as they frequently contain 
+        # false positive cryptographic integrity hashes (e.g. SHA-512) triggering entropy rules.
+        lower_path = file_path.lower()
+        if any(lock_file in lower_path for lock_file in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock")):
+            return None
+
         line_number = finding.get("StartLine", 1)
         column = finding.get("StartColumn", 1)
         secret_type = finding.get("RuleID", finding.get("Type", "secret"))
