@@ -444,10 +444,130 @@ function startPolling(scanId) {
   }, 2500);
 }
 
+const scanAgents = [
+  {
+    id: 'john',
+    name: 'John',
+    role: 'SAST Auditor',
+    desc: 'Analyzes code for common vulnerabilities and quality issues.',
+    icon: 'cpu',
+    range: [10, 60]
+  },
+  {
+    id: 'sam',
+    name: 'Sam',
+    role: 'Secret Detector',
+    desc: 'Scans files for hardcoded passwords, tokens, and private keys.',
+    icon: 'key',
+    range: [15, 60]
+  },
+  {
+    id: 'pam',
+    name: 'Pam',
+    role: 'SCA Analyst',
+    desc: 'Checks packages and dependencies for known CVE vulnerabilities.',
+    icon: 'package',
+    range: [20, 60]
+  },
+  {
+    id: 'tina',
+    name: 'Tina',
+    role: 'Taint Analyzer',
+    desc: 'Traces data flow to detect injection risks and input issues.',
+    icon: 'activity',
+    range: [60, 80]
+  },
+  {
+    id: 'triager',
+    name: 'Triager',
+    role: 'Governance Agent',
+    desc: 'Triage findings and deduplicate overlapping alerts.',
+    icon: 'shield',
+    range: [80, 90]
+  },
+  {
+    id: 'fixer',
+    name: 'Fixer',
+    role: 'Remediation Engineer',
+    desc: 'Generates automated code suggestions and fixes.',
+    icon: 'tool',
+    range: [90, 95]
+  },
+  {
+    id: 'assembler',
+    name: 'Report Assembler',
+    role: 'Compliance Officer',
+    desc: 'Compiles details, calculates risk score, and prepares report.',
+    icon: 'file-text',
+    range: [95, 100]
+  }
+];
+
+function renderAgentSwarm(percent, scanStatus) {
+  const container = document.getElementById('agent-swarm-grid');
+  if (!container) return;
+  
+  let html = '';
+  scanAgents.forEach(agent => {
+    let agentStatus = 'pending';
+    
+    if (scanStatus === 'completed') {
+      agentStatus = 'completed';
+    } else if (scanStatus === 'failed') {
+      if (percent >= agent.range[0] && percent < agent.range[1]) {
+        agentStatus = 'failed';
+      } else if (percent >= agent.range[1]) {
+        agentStatus = 'completed';
+      } else {
+        agentStatus = 'pending';
+      }
+    } else {
+      if (percent < agent.range[0]) {
+        agentStatus = 'pending';
+      } else if (percent >= agent.range[0] && percent < agent.range[1]) {
+        agentStatus = 'running';
+      } else {
+        agentStatus = 'completed';
+      }
+    }
+    
+    let statusBadgeHtml = '';
+    
+    if (agentStatus === 'pending') {
+      statusBadgeHtml = `<span class="agent-status-badge"><i data-feather="clock"></i> Pending</span>`;
+    } else if (agentStatus === 'running') {
+      statusBadgeHtml = `<span class="agent-status-badge"><i data-feather="loader" class="agent-spinner"></i> Active</span>`;
+    } else if (agentStatus === 'completed') {
+      statusBadgeHtml = `<span class="agent-status-badge"><i data-feather="check-circle"></i> Done</span>`;
+    } else if (agentStatus === 'failed') {
+      statusBadgeHtml = `<span class="agent-status-badge"><i data-feather="alert-circle"></i> Failed</span>`;
+    }
+    
+    html += `
+      <div class="agent-card ${agentStatus}">
+        <div class="agent-card-left">
+          <div class="agent-avatar">
+            <i data-feather="${agent.icon}"></i>
+          </div>
+          <div class="agent-info">
+            <span class="agent-name">${agent.name} <span class="agent-role">(${agent.role})</span></span>
+            <span class="agent-desc" title="${agent.desc}">${agent.desc}</span>
+          </div>
+        </div>
+        ${statusBadgeHtml}
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+  feather.replace();
+}
+
 function updateProgress(percent, phaseText, status) {
   docElements.progressPhase.textContent = phaseText;
   docElements.progressPercent.textContent = `${percent}%`;
   docElements.progressBarFill.style.width = `${percent}%`;
+  renderAgentSwarm(percent, status);
 }
 
 // Render Results View
