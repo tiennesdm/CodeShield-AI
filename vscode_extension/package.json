@@ -1,0 +1,333 @@
+{
+  "name": "codeshield-ai",
+  "displayName": "CodeShield AI Security Scanner",
+  "description": "Real-time security vulnerability detection and fixing for your code",
+  "version": "1.0.0",
+  "publisher": "codeshield-ai",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Security",
+    "Linters",
+    "Programming Languages",
+    "Debuggers"
+  ],
+  "keywords": [
+    "security",
+    "sast",
+    "vulnerability",
+    "scanner",
+    "code quality",
+    "static analysis",
+    "secrets",
+    "sql injection",
+    "xss"
+  ],
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1a1a2e",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "onLanguage:python",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:java",
+    "onLanguage:go",
+    "onLanguage:ruby",
+    "onLanguage:php",
+    "onLanguage:csharp",
+    "onLanguage:cpp",
+    "onLanguage:c"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "type": "object",
+      "title": "CodeShield AI",
+      "properties": {
+        "codeshield.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable CodeShield AI security scanning",
+          "scope": "resource"
+        },
+        "codeshield.scanOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Scan for vulnerabilities on file save",
+          "scope": "resource"
+        },
+        "codeshield.severityThreshold": {
+          "type": "string",
+          "default": "LOW",
+          "enum": [
+            "INFO",
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "CRITICAL"
+          ],
+          "enumDescriptions": [
+            "Show all issues including informational",
+            "Show low severity and above",
+            "Show medium severity and above",
+            "Show high severity and above",
+            "Show only critical issues"
+          ],
+          "description": "Minimum severity level to report",
+          "scope": "resource"
+        },
+        "codeshield.enabledTools": {
+          "type": "array",
+          "default": [
+            "semgrep",
+            "bandit",
+            "eslint",
+            "custom_ai"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "List of security tools to enable",
+          "scope": "resource"
+        },
+        "codeshield.apiUrl": {
+          "type": "string",
+          "default": "https://api.codeshield.ai",
+          "description": "CodeShield AI API URL",
+          "scope": "resource"
+        },
+        "codeshield.apiToken": {
+          "type": "string",
+          "default": "",
+          "description": "CodeShield AI API token (leave empty to use local scanning only)",
+          "scope": "resource"
+        },
+        "codeshield.maxDiagnosticsPerFile": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 200,
+          "description": "Maximum number of diagnostics shown per file",
+          "scope": "resource"
+        },
+        "codeshield.enableCodeActions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable quick fix code actions for vulnerabilities",
+          "scope": "resource"
+        },
+        "codeshield.enableHover": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable hover information for vulnerabilities",
+          "scope": "resource"
+        },
+        "codeshield.showInlineDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline vulnerability highlighting decorations",
+          "scope": "resource"
+        },
+        "codeshield.ignorePatterns": {
+          "type": "array",
+          "default": [
+            "test_*",
+            "*_test.py",
+            "tests/",
+            "vendor/",
+            "node_modules/",
+            ".venv/",
+            "dist/",
+            "build/"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Patterns for files/paths to ignore during scanning",
+          "scope": "resource"
+        },
+        "codeshield.lspServer.port": {
+          "type": "number",
+          "default": 8211,
+          "description": "Port for LSP server communication",
+          "scope": "application"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "codeshield.scanNow",
+        "title": "Scan Now",
+        "category": "CodeShield",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "codeshield.scanWorkspace",
+        "title": "Scan Workspace",
+        "category": "CodeShield",
+        "icon": "$(workspace-trusted)"
+      },
+      {
+        "command": "codeshield.applyFix",
+        "title": "Apply Security Fix",
+        "category": "CodeShield",
+        "icon": "$(wrench)"
+      },
+      {
+        "command": "codeshield.showDetails",
+        "title": "Show Vulnerability Details",
+        "category": "CodeShield",
+        "icon": "$(info)"
+      },
+      {
+        "command": "codeshield.showDashboard",
+        "title": "Show Security Dashboard",
+        "category": "CodeShield",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "codeshield.clearDiagnostics",
+        "title": "Clear Diagnostics",
+        "category": "CodeShield",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "codeshield.toggleEnabled",
+        "title": "Toggle CodeShield",
+        "category": "CodeShield",
+        "icon": "$(toggle-left)"
+      },
+      {
+        "command": "codeshield.openSettings",
+        "title": "Open Settings",
+        "category": "CodeShield",
+        "icon": "$(gear)"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "codeshield.scanNow",
+          "group": "2_codeshield@1",
+          "when": "editorLangId =~ /(python|javascript|typescript|java|go|ruby|php|csharp|c|cpp)/"
+        },
+        {
+          "command": "codeshield.showDetails",
+          "group": "2_codeshield@2",
+          "when": "editorHasSelection"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "codeshield.scanNow",
+          "group": "navigation",
+          "when": "editorLangId =~ /(python|javascript|typescript|java|go|ruby|php|csharp|c|cpp)/"
+        },
+        {
+          "command": "codeshield.showDashboard",
+          "group": "navigation",
+          "when": "codeshield.enabled"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "codeshield.scanNow",
+          "group": "2_codeshield@1",
+          "when": "explorerResourceIsFile"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "codeshield.scanWorkspace",
+          "group": "navigation@1",
+          "when": "view == codeshieldSecurityDashboard"
+        },
+        {
+          "command": "codeshield.clearDiagnostics",
+          "group": "navigation@2",
+          "when": "view == codeshieldSecurityDashboard"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "codeshield.scanNow",
+          "when": "codeshield.enabled"
+        },
+        {
+          "command": "codeshield.scanWorkspace",
+          "when": "codeshield.enabled"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "codeshieldSecurityDashboard",
+          "name": "Security Dashboard",
+          "when": "codeshield.enabled",
+          "icon": "$(shield)",
+          "contextualTitle": "Security Dashboard"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codeshield",
+          "title": "CodeShield AI",
+          "icon": "$(shield)"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "codeshieldSecurityDashboard",
+        "contents": "Welcome to CodeShield AI Security Scanner.\n[Scan Now](command:codeshield.scanWorkspace)\n[Open Settings](command:codeshield.openSettings)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "codeshield.scanNow",
+        "key": "ctrl+shift+s",
+        "mac": "cmd+shift+s",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "codeshield.showDashboard",
+        "key": "ctrl+shift+d",
+        "mac": "cmd+shift+d"
+      }
+    ],
+    "languages": [
+      {
+        "id": "codeshield-ignore",
+        "aliases": ["CodeShield Ignore"],
+        "extensions": [".codeshieldignore"]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

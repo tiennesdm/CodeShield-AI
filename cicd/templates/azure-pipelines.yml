@@ -1,0 +1,406 @@
+# CodeShield AI - Azure DevOps Pipeline Template
+# https://codeshield.ai
+#
+# Usage:
+# 1. Copy this file to your repository as 'azure-pipelines.yml'
+# 2. Create a variable group named 'codeshield-secrets' with CODESHIELD_API_TOKEN
+# 3. The pipeline will automatically run on push/PR to main/develop
+
+# ============================================
+# Trigger Configuration
+# ============================================
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+      - release/*
+  paths:
+    exclude:
+      - '**/*.md'
+      - docs/**
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+schedules:
+  - cron: "0 2 * * 1"
+    displayName: "Weekly Security Scan (Monday 2AM)"
+    branches:
+      include:
+        - main
+    always: true
+
+# ============================================
+# Pipeline Variables
+# ============================================
+variables:
+  - name: CODESHIELD_API_URL
+    value: 'https://api.codeshield.ai'
+  - name: CODESHIELD_SCAN_TYPE
+    value: 'full'
+  - name: CODESHIELD_LANGUAGES
+    value: 'python,javascript,typescript,java,go'
+  - name: CODESHIELD_SEVERITY_THRESHOLD
+    value: 'MEDIUM'
+  - name: CODESHIELD_FAIL_ON
+    value: 'HIGH'
+  - name: CODESHIELD_TIMEOUT
+    value: '600'
+  - name: CODESHIELD_OUTPUT_FORMAT
+    value: 'sarif'
+  - group: codeshield-secrets  # Contains CODESHIELD_API_TOKEN
+
+# ============================================
+# Pipeline Stages
+# ============================================
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+  # ============================================
+  # Build Stage
+  # ============================================
+  - stage: Build
+    displayName: 'Build'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build Application'
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.11'
+            displayName: 'Use Python 3.11'
+
+          - script: |
+              echo "Building application..."
+              # Add your build steps here
+            displayName: 'Build'
+
+  # ============================================
+  # Test Stage
+  # ============================================
+  - stage: Test
+    displayName: 'Test'
+    dependsOn: Build
+    jobs:
+      - job: TestJob
+        displayName: 'Run Tests'
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.11'
+            displayName: 'Use Python 3.11'
+
+          - script: |
+              echo "Running tests..."
+              # Add your test steps here
+            displayName: 'Run Tests'
+
+  # ============================================
+  # Security Scan Stage (CodeShield AI)
+  # ============================================
+  - stage: SecurityScan
+    displayName: 'Security Scan'
+    dependsOn: Test
+    condition: succeededOrFailed()
+    jobs:
+      - job: CodeShieldScan
+        displayName: 'CodeShield AI Security Scan'
+        timeoutInMinutes: 15
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.11'
+            displayName: 'Use Python 3.11'
+
+          # Install dependencies
+          - script: |
+              sudo apt-get update && sudo apt-get install -y jq zip
+            displayName: 'Install Dependencies'
+
+          # Start security scan
+          - script: |
+              echo "=== CodeShield AI Security Scan ==="
+              echo "Languages: $(CODESHIELD_LANGUAGES)"
+              echo "Threshold: $(CODESHIELD_SEVERITY_THRESHOLD)"
+              echo "Fail On: $(CODESHIELD_FAIL_ON)"
+
+              # Prepare scan config
+              cat > scan-config.json <<CONFIG
+              {
+                "scan_type": "$(CODESHIELD_SCAN_TYPE)",
+                "languages": ["python", "javascript", "typescript", "java", "go"],
+                "severity_threshold": "$(CODESHIELD_SEVERITY_THRESHOLD)",
+                "output_format": "sarif",
+                "timeout": $(CODESHIELD_TIMEOUT)
+              }
+              CONFIG
+
+              # Create source archive
+              zip -r source-code.zip . \
+                  -x '*.git/*' \
+                  -x 'node_modules/*' \
+                  -x '.venv/*' \
+                  -x 'vendor/*' \
+                  -x 'target/*' \
+                  -x 'build/*' \
+                  -x '*.pyc' \
+                  -x '__pycache__/*' \
+                  2>/dev/null || true
+
+              # Start scan
+              SCAN_RESPONSE=$(curl -s -X POST "$(CODESHIELD_API_URL)/api/scan/zip" \
+                  -H "Authorization: Bearer $(CODESHIELD_API_TOKEN)" \
+                  -F "file=@source-code.zip" \
+                  -F "config=@scan-config.json")
+
+              echo "$SCAN_RESPONSE" | jq .
+              SCAN_ID=$(echo "$SCAN_RESPONSE" | jq -r '.scan_id')
+              echo "##vso[task.setvariable variable=SCAN_ID]$SCAN_ID"
+              echo "Scan started: $SCAN_ID"
+            displayName: 'Start Security Scan'
+            env:
+              CODESHIELD_API_TOKEN: $(CODESHIELD_API_TOKEN)
+
+          # Wait for scan completion
+          - script: |
+              SCAN_ID="$(SCAN_ID)"
+              TIMEOUT=$(CODESHIELD_TIMEOUT)
+              ELAPSED=0
+              INTERVAL=5
+
+              echo "Polling scan status (timeout: ${TIMEOUT}s)..."
+
+              while [ $ELAPSED -lt $TIMEOUT ]; do
+                  STATUS_RESPONSE=$(curl -s "$(CODESHIELD_API_URL)/api/scan/$SCAN_ID/status" \
+                      -H "Authorization: Bearer $(CODESHIELD_API_TOKEN)")
+                  STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.status')
+                  PROGRESS=$(echo "$STATUS_RESPONSE" | jq -r '.progress // 0')
+
+                  echo "[$(date '+%H:%M:%S')] Status: $STATUS ($PROGRESS%)"
+
+                  [ "$STATUS" = "completed" ] && break
+                  [ "$STATUS" = "failed" ] && exit 1
+
+                  sleep $INTERVAL
+                  ELAPSED=$((ELAPSED + INTERVAL))
+              done
+
+              if [ $ELAPSED -ge $TIMEOUT ]; then
+                  echo "##vso[task.logissue type=error]Scan timed out after ${TIMEOUT}s"
+                  exit 1
+              fi
+
+              echo "Scan completed successfully"
+            displayName: 'Wait for Scan Completion'
+            env:
+              CODESHIELD_API_TOKEN: $(CODESHIELD_API_TOKEN)
+
+          # Export results
+          - script: |
+              SCAN_ID="$(SCAN_ID)"
+
+              # Export SARIF
+              curl -s "$(CODESHIELD_API_URL)/api/export/$SCAN_ID?format=sarif" \
+                  -H "Authorization: Bearer $(CODESHIELD_API_TOKEN)" \
+                  > $(Build.ArtifactStagingDirectory)/codeshield-results.sarif
+
+              # Export HTML report
+              curl -s "$(CODESHIELD_API_URL)/api/export/$SCAN_ID?format=html" \
+                  -H "Authorization: Bearer $(CODESHIELD_API_TOKEN)" \
+                  > $(Build.ArtifactStagingDirectory)/codeshield-report.html
+
+              # Export JSON for summary
+              curl -s "$(CODESHIELD_API_URL)/api/scan/$SCAN_ID/results" \
+                  -H "Authorization: Bearer $(CODESHIELD_API_TOKEN)" \
+                  > $(Build.ArtifactStagingDirectory)/codeshield-results.json
+
+              echo "Results exported successfully"
+            displayName: 'Export Scan Results'
+            env:
+              CODESHIELD_API_TOKEN: $(CODESHIELD_API_TOKEN)
+
+          # Publish artifacts
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: 'codeshield-results'
+              publishLocation: 'Container'
+            displayName: 'Publish Scan Artifacts'
+            condition: always()
+
+          # Publish SARIF to Advanced Security
+          - task: AdvancedSecurity-Publish@1
+            inputs:
+              SarifInputPath: '$(Build.ArtifactStagingDirectory)/codeshield-results.sarif'
+              Category: 'codeshield-ai'
+            displayName: 'Publish SARIF to Advanced Security'
+            condition: always()
+
+          # Generate summary & quality gate
+          - script: |
+              RESULTS_FILE="$(Build.ArtifactStagingDirectory)/codeshield-results.json"
+
+              if [ -f "$RESULTS_FILE" ]; then
+                  CRITICAL=$(python3 -c "import json; d=json.load(open('$RESULTS_FILE')); print(d.get('stats',{}).get('critical',0))")
+                  HIGH=$(python3 -c "import json; d=json.load(open('$RESULTS_FILE')); print(d.get('stats',{}).get('high',0))")
+                  MEDIUM=$(python3 -c "import json; d=json.load(open('$RESULTS_FILE')); print(d.get('stats',{}).get('medium',0))")
+                  LOW=$(python3 -c "import json; d=json.load(open('$RESULTS_FILE')); print(d.get('stats',{}).get('low',0))")
+                  RISK=$(python3 -c "import json; d=json.load(open('$RESULTS_FILE')); print(d.get('risk_score',0))")
+
+                  # Build summary
+                  echo "##vso[task.logissue type=summary]### 🔒 CodeShield AI Security Scan Results
+| Severity | Count |
+|----------|-------|
+| 🔴 Critical | $CRITICAL |
+| 🟠 High | $HIGH |
+| 🟡 Medium | $MEDIUM |
+| 🟢 Low | $LOW |
+
+**Risk Score:** $RISK/100"
+
+                  echo "##vso[task.setvariable variable=CODESHIELD_CRITICAL;isOutput=true]$CRITICAL"
+                  echo "##vso[task.setvariable variable=CODESHIELD_HIGH;isOutput=true]$HIGH"
+                  echo "##vso[task.setvariable variable=CODESHIELD_RISK;isOutput=true]$RISK"
+
+                  # Quality gate
+                  EXIT_CODE=0
+                  case "$(CODESHIELD_FAIL_ON)" in
+                      "CRITICAL") [ "$CRITICAL" -gt 0 ] && EXIT_CODE=1 ;;
+                      "HIGH") [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ] && EXIT_CODE=1 ;;
+                      "MEDIUM") [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ] || [ "$MEDIUM" -gt 0 ] && EXIT_CODE=1 ;;
+                  esac
+
+                  if [ $EXIT_CODE -ne 0 ]; then
+                      echo "##vso[task.logissue type=error]❌ Security gate FAILED: vulnerabilities found at or above '$(CODESHIELD_FAIL_ON)'"
+                      exit 1
+                  fi
+
+                  echo "✅ Security quality gate PASSED"
+              fi
+            displayName: 'Security Quality Gate'
+            name: QualityGate
+            env:
+              CODESHIELD_API_TOKEN: $(CODESHIELD_API_TOKEN)
+
+          # Create work items for critical findings
+          - task: PythonScript@0
+            displayName: 'Create Work Items for Critical Findings'
+            condition: and(always(), gt(variables['CODESHIELD_CRITICAL'], 0))
+            inputs:
+              scriptSource: 'inline'
+              script: |
+                import json
+                import os
+                import urllib.request
+                import urllib.error
+
+                org_url = os.environ.get('SYSTEM_TEAMFOUNDATIONCOLLECTIONURI', '')
+                project = os.environ.get('SYSTEM_TEAMPROJECT', '')
+                pat = os.environ.get('SYSTEM_ACCESSTOKEN', '')
+                build_id = os.environ.get('BUILD_BUILDID', '')
+                build_url = f"{org_url}{project}/_build/results?buildId={build_id}"
+
+                if not pat:
+                    print("No access token available. Skipping work item creation.")
+                    return
+
+                results_file = "$(Build.ArtifactStagingDirectory)/codeshield-results.json"
+                try:
+                    with open(results_file) as f:
+                        results = json.load(f)
+                except Exception as e:
+                    print(f"Failed to read results: {e}")
+                    return
+
+                critical_vulns = [
+                    v for v in results.get('vulnerabilities', [])
+                    if v.get('severity', '').upper() == 'CRITICAL'
+                ]
+
+                if not critical_vulns:
+                    print("No critical vulnerabilities found.")
+                    return
+
+                for vuln in critical_vulns[:5]:  # Limit to 5 work items
+                    title = f"[CRITICAL] {vuln.get('title', 'Security Vulnerability')}"
+                    description = f"""<b>Critical security vulnerability detected by CodeShield AI</b><br/>
+                    <br/>
+                    <b>Title:</b> {vuln.get('title', 'N/A')}<br/>
+                    <b>Category:</b> {vuln.get('category', 'N/A')}<br/>
+                    <b>CWE:</b> {vuln.get('cwe_id', 'N/A')}<br/>
+                    <b>File:</b> {vuln.get('file_path', 'N/A')}<br/>
+                    <b>Line:</b> {vuln.get('line_number', 'N/A')}<br/>
+                    <br/>
+                    <b>Description:</b><br/>
+                    {vuln.get('description', 'No description available')}<br/>
+                    <br/>
+                    <b>Fix Suggestion:</b><br/>
+                    {vuln.get('fix_suggestion', 'Review and fix based on CWE guidelines.')}<br/>
+                    <br/>
+                    <a href="{build_url}">View Build</a>"""
+
+                    work_item = [
+                        {"op": "add", "path": "/fields/System.Title", "value": title},
+                        {"op": "add", "path": "/fields/System.Description", "value": description},
+                        {"op": "add", "path": "/fields/Microsoft.VSTS.Common.Priority", "value": 1},
+                        {"op": "add", "path": "/fields/Microsoft.VSTS.Common.Severity", "value": "1 - Critical"},
+                        {"op": "add", "path": "/fields/System.Tags", "value": "security;codeshield;critical"},
+                    ]
+
+                    url = f"{org_url}{project}/_apis/wit/workitems/$Bug?api-version=7.0"
+                    import base64
+                    auth = base64.b64encode(f":{pat}".encode()).decode()
+                    req = urllib.request.Request(
+                        url,
+                        data=json.dumps(work_item).encode(),
+                        headers={
+                            'Content-Type': 'application/json-patch+json',
+                            'Authorization': f'Basic {auth}'
+                        },
+                        method='POST'
+                    )
+
+                    try:
+                        with urllib.request.urlopen(req, timeout=30) as resp:
+                            data = json.loads(resp.read())
+                            print(f"Created work item: {data.get('id')} - {title}")
+                    except Exception as e:
+                        print(f"Error creating work item: {e}")
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+  # ============================================
+  # Deploy Stage (gated by security scan)
+  # ============================================
+  - stage: Deploy
+    displayName: 'Deploy'
+    dependsOn:
+      - Build
+      - Test
+      - SecurityScan
+    condition: |
+      and(
+        succeeded('Build'),
+        succeeded('Test'),
+        in(dependencies.SecurityScan.result, 'Succeeded', 'SucceededWithIssues')
+      )
+    jobs:
+      - deployment: DeployApp
+        displayName: 'Deploy Application'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - script: |
+                    echo "Deploying application..."
+                    # Add deployment steps here
+                  displayName: 'Deploy'

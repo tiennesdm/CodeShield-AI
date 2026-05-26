@@ -1,0 +1,169 @@
+# CodeShield AI - GitHub Action Template
+# https://codeshield.ai
+# 
+# Usage:
+# 1. Copy this file to .github/workflows/codeshield-scan.yml in your repository
+# 2. Add CODESHIELD_API_TOKEN to your repository secrets
+# 3. Customize inputs as needed
+
+name: CodeShield AI Security Scan
+
+on:
+  push:
+    branches: [main, develop, 'release/*']
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  pull_request:
+    branches: [main, develop]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Scan type'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - sast
+          - secrets
+          - dependencies
+      severity_threshold:
+        description: 'Severity threshold'
+        required: true
+        default: 'MEDIUM'
+        type: choice
+        options:
+          - INFO
+          - LOW
+          - MEDIUM
+          - HIGH
+          - CRITICAL
+
+# Required permissions for SARIF upload and PR comments
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+  actions: read
+  checks: write
+
+# Security hardening: pin all action versions
+env:
+  CODESHIELD_API_URL: https://api.codeshield.ai
+
+jobs:
+  codeshield-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # =============================================
+      # Checkout
+      # =============================================
+      - name: Checkout code
+        uses: actions/checkout@v4.1.1
+        with:
+          fetch-depth: 0  # Full history for better analysis
+          persist-credentials: false
+
+      # =============================================
+      # Run CodeShield AI Scan
+      # =============================================
+      - name: Run CodeShield AI Security Scan
+        uses: codeshield-ai/codeshield-action@v1
+        id: codeshield
+        with:
+          scan_type: ${{ github.event.inputs.scan_type || 'full' }}
+          languages: python,javascript,typescript,java,go
+          severity_threshold: ${{ github.event.inputs.severity_threshold || 'MEDIUM' }}
+          output_format: sarif
+          fail_on: HIGH
+          api_token: ${{ secrets.CODESHIELD_API_TOKEN }}
+          pr_comments: 'true'
+          sarif_upload: 'true'
+          timeout: 600
+          ignore_paths: tests/,docs/,migrations/,vendor/
+
+      # =============================================
+      # Upload SARIF to GitHub Code Scanning
+      # =============================================
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3.25.0
+        if: always()
+        with:
+          sarif_file: ${{ steps.codeshield.outputs.sarif_file }}
+          category: codeshield-ai
+          checkout_path: ${{ github.workspace }}
+
+      # =============================================
+      # Upload scan artifacts
+      # =============================================
+      - name: Upload scan artifacts
+        uses: actions/upload-artifact@v4.3.1
+        if: always()
+        with:
+          name: codeshield-results-${{ github.sha }}
+          path: |
+            codeshield-results/
+          retention-days: 30
+          if-no-files-found: warn
+
+      # =============================================
+      # Job Summary
+      # =============================================
+      - name: Add Job Summary
+        if: always()
+        run: |
+          echo "## 🔒 CodeShield AI Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Critical | ${{ steps.codeshield.outputs.critical_count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| High | ${{ steps.codeshield.outputs.high_count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Medium | ${{ steps.codeshield.outputs.medium_count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Low | ${{ steps.codeshield.outputs.low_count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Risk Score** | **${{ steps.codeshield.outputs.risk_score }}/100** |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.codeshield.outputs.exit_code }}" = "1" ]; then
+            echo "### ❌ Scan failed - vulnerabilities found above threshold" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ✅ Scan passed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # =============================================
+  # Policy Enforcement Job (separate for clarity)
+  # =============================================
+  security-policy-check:
+    name: Security Policy Check
+    needs: codeshield-scan
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Evaluate Security Policy
+        run: |
+          echo "### Security Policy Evaluation" >> $GITHUB_STEP_SUMMARY
+          echo "Critical: ${{ needs.codeshield-scan.outputs.critical_count }}" >> $GITHUB_STEP_SUMMARY
+          echo "High: ${{ needs.codeshield-scan.outputs.high_count }}" >> $GITHUB_STEP_SUMMARY
+
+          # Block merge on CRITICAL
+          if [ "${{ needs.codeshield-scan.outputs.critical_count }}" -gt 0 ]; then
+            echo "::error::❌ Policy violation: CRITICAL vulnerabilities found. Merge blocked."
+            exit 1
+          fi
+
+          # Block merge on >5 HIGH
+          if [ "${{ needs.codeshield-scan.outputs.high_count }}" -gt 5 ]; then
+            echo "::error::❌ Policy violation: More than 5 HIGH vulnerabilities found. Merge blocked."
+            exit 1
+          fi
+
+          echo "✅ All security policies passed"

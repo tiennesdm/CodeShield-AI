@@ -1,0 +1,329 @@
+# ============================================
+# CodeShield AI - GitLab CI Security Pipeline
+# https://codeshield.ai
+#
+# Usage:
+# 1. Include this file in your .gitlab-ci.yml:
+#    include:
+#      - local: '/codeshield-gitlab-ci.yml'
+# 2. Or copy contents directly to your .gitlab-ci.yml
+# 3. Add CODESHIELD_API_TOKEN to CI/CD Variables
+# ============================================
+
+variables:
+  CODESHIELD_API_URL: "https://api.codeshield.ai"
+  CODESHIELD_SCAN_TYPE: "full"
+  CODESHIELD_SEVERITY_THRESHOLD: "MEDIUM"
+  CODESHIELD_FAIL_ON: "HIGH"
+  CODESHIELD_OUTPUT_FORMAT: "sarif"
+  CODESHIELD_TIMEOUT: "600"
+  CODESHIELD_LANGUAGES: "python,javascript,typescript,java"
+
+# Default configuration for all jobs
+default:
+  image: python:3.11-slim
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends curl jq zip git
+    - pip install codeshield-cli 2>/dev/null || true
+
+# Pipeline stages
+stages:
+  - build
+  - test
+  - security
+  - deploy
+
+# ============================================
+# Security Scan Jobs
+# ============================================
+
+# SAST Scanning Job
+codeshield-sast:
+  stage: security
+  variables:
+    CODESHIELD_SCAN_TYPE: "sast"
+  script:
+    - |
+      echo "=== CodeShield AI SAST Scan ==="
+      echo "Languages: $CODESHIELD_LANGUAGES"
+      echo "Threshold: $CODESHIELD_SEVERITY_THRESHOLD"
+
+      # Prepare scan config
+      cat > scan-config.json <<CONFIG
+      {
+        "scan_type": "sast",
+        "languages": $(echo "$CODESHIELD_LANGUAGES" | tr ',' '\n' | jq -R . | jq -s .),
+        "severity_threshold": "$CODESHIELD_SEVERITY_THRESHOLD",
+        "output_format": "sarif",
+        "timeout": $CODESHIELD_TIMEOUT
+      }
+      CONFIG
+
+      # Create source archive
+      ZIP_FILE="source-code.zip"
+      zip -r "$ZIP_FILE" . \
+          -x '*.git/*' \
+          -x 'node_modules/*' \
+          -x '.venv/*' \
+          -x 'vendor/*' \
+          -x 'target/*' \
+          -x 'build/*' \
+          -x '*.pyc' \
+          -x '__pycache__/*' \
+          2>/dev/null || true
+
+      # Start scan
+      SCAN_RESPONSE=$(curl -s -X POST "$CODESHIELD_API_URL/api/scan/zip" \
+          -H "Authorization: Bearer $CODESHIELD_API_TOKEN" \
+          -F "file=@$ZIP_FILE" \
+          -F "config=@scan-config.json")
+
+      SCAN_ID=$(echo "$SCAN_RESPONSE" | jq -r '.scan_id')
+      echo "Scan started: $SCAN_ID"
+
+      # Poll for completion
+      TIMEOUT=$CODESHIELD_TIMEOUT
+      ELAPSED=0
+      INTERVAL=5
+      while [ $ELAPSED -lt $TIMEOUT ]; do
+          STATUS=$(curl -s "$CODESHIELD_API_URL/api/scan/$SCAN_ID/status" \
+              -H "Authorization: Bearer $CODESHIELD_API_TOKEN" | jq -r '.status')
+          echo "Status: $STATUS ($(date))"
+          [ "$STATUS" = "completed" ] && break
+          [ "$STATUS" = "failed" ] && exit 1
+          sleep $INTERVAL
+          ELAPSED=$((ELAPSED + INTERVAL))
+      done
+
+      # Export SARIF for GitLab Security Dashboard
+      curl -s "$CODESHIELD_API_URL/api/export/$SCAN_ID?format=sarif" \
+          -H "Authorization: Bearer $CODESHIELD_API_TOKEN" \
+          > codeshield-sast-results.sarif
+
+      # Export summary
+      curl -s "$CODESHIELD_API_URL/api/scan/$SCAN_ID/results" \
+          -H "Authorization: Bearer $CODESHIELD_API_TOKEN" \
+          > codeshield-sast-summary.json
+
+      echo "SAST scan complete."
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - codeshield-sast-results.sarif
+      - codeshield-sast-summary.json
+    reports:
+      sarif: codeshield-sast-results.sarif
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+  allow_failure: false
+
+# Secret Detection Job
+codeshield-secrets:
+  stage: security
+  variables:
+    CODESHIELD_SCAN_TYPE: "secrets"
+    CODESHIELD_SEVERITY_THRESHOLD: "LOW"
+  script:
+    - |
+      echo "=== CodeShield AI Secret Detection ==="
+
+      cat > secrets-config.json <<CONFIG
+      {
+        "scan_type": "secrets",
+        "languages": ["*"],
+        "severity_threshold": "LOW",
+        "output_format": "sarif",
+        "timeout": $CODESHIELD_TIMEOUT
+      }
+      CONFIG
+
+      ZIP_FILE="source-code.zip"
+      zip -r "$ZIP_FILE" . \
+          -x '*.git/*' \
+          -x 'node_modules/*' \
+          -x '.venv/*' \
+          2>/dev/null || true
+
+      SCAN_RESPONSE=$(curl -s -X POST "$CODESHIELD_API_URL/api/scan/zip" \
+          -H "Authorization: Bearer $CODESHIELD_API_TOKEN" \
+          -F "file=@$ZIP_FILE" \
+          -F "config=@secrets-config.json")
+
+      SCAN_ID=$(echo "$SCAN_RESPONSE" | jq -r '.scan_id')
+      echo "Scan started: $SCAN_ID"
+
+      for i in $(seq 1 $((CODESHIELD_TIMEOUT / 5))); do
+          STATUS=$(curl -s "$CODESHIELD_API_URL/api/scan/$SCAN_ID/status" \
+              -H "Authorization: Bearer $CODESHIELD_API_TOKEN" | jq -r '.status')
+          echo "Status: $STATUS"
+          [ "$STATUS" = "completed" ] && break
+          [ "$STATUS" = "failed" ] && exit 1
+          sleep 5
+      done
+
+      curl -s "$CODESHIELD_API_URL/api/export/$SCAN_ID?format=sarif" \
+          -H "Authorization: Bearer $CODESHIELD_API_TOKEN" \
+          > codeshield-secrets-results.sarif
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - codeshield-secrets-results.sarif
+    reports:
+      sarif: codeshield-secrets-results.sarif
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+  allow_failure: false
+
+# Dependency Scanning Job
+codeshield-dependency:
+  stage: security
+  variables:
+    CODESHIELD_SCAN_TYPE: "dependencies"
+  script:
+    - |
+      echo "=== CodeShield AI Dependency Scan ==="
+
+      ZIP_FILE="source-code.zip"
+      zip -r "$ZIP_FILE" . \
+          -x '*.git/*' \
+          -x 'node_modules/*' \
+          -x '.venv/*' \
+          -x 'target/*' \
+          2>/dev/null || true
+
+      SCAN_RESPONSE=$(curl -s -X POST "$CODESHIELD_API_URL/api/scan/zip" \
+          -H "Authorization: Bearer $CODESHIELD_API_TOKEN" \
+          -F "file=@$ZIP_FILE" \
+          -F "config={\"scan_type\": \"dependencies\", \"output_format\": \"sarif\"}")
+
+      SCAN_ID=$(echo "$SCAN_RESPONSE" | jq -r '.scan_id')
+
+      for i in $(seq 1 $((CODESHIELD_TIMEOUT / 5))); do
+          STATUS=$(curl -s "$CODESHIELD_API_URL/api/scan/$SCAN_ID/status" \
+              -H "Authorization: Bearer $CODESHIELD_API_TOKEN" | jq -r '.status')
+          [ "$STATUS" = "completed" ] && break
+          sleep 5
+      done
+
+      curl -s "$CODESHIELD_API_URL/api/export/$SCAN_ID?format=sarif" \
+          -H "Authorization: Bearer $CODESHIELD_API_TOKEN" \
+          > codeshield-dependency-results.sarif
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - codeshield-dependency-results.sarif
+    reports:
+      sarif: codeshield-dependency-results.sarif
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+  allow_failure: true
+
+# Merge Reports Job
+codeshield-merge-reports:
+  stage: security
+  needs:
+    - job: codeshield-sast
+      optional: true
+    - job: codeshield-secrets
+      optional: true
+    - job: codeshield-dependency
+      optional: true
+  script:
+    - |
+      echo "=== Merging CodeShield Reports ==="
+
+      if [ -f "codeshield-sast-results.sarif" ] && [ -f "codeshield-secrets-results.sarif" ]; then
+          jq -s '{
+            "$schema": .[0]."$schema",
+            version: .[0].version,
+            runs: [.[].runs[]]
+          }' codeshield-sast-results.sarif codeshield-secrets-results.sarif \
+              > codeshield-merged-results.sarif 2>/dev/null || \
+              cp codeshield-sast-results.sarif codeshield-merged-results.sarif
+      elif [ -f "codeshield-sast-results.sarif" ]; then
+          cp codeshield-sast-results.sarif codeshield-merged-results.sarif
+      elif [ -f "codeshield-secrets-results.sarif" ]; then
+          cp codeshield-secrets-results.sarif codeshield-merged-results.sarif
+      else
+          echo '{"$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json", "version": "2.1.0", "runs": []}' \
+              > codeshield-merged-results.sarif
+      fi
+
+      echo "Reports merged."
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - codeshield-merged-results.sarif
+    reports:
+      sarif: codeshield-merged-results.sarif
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+  allow_failure: false
+
+# ============================================
+# Security Quality Gate
+# ============================================
+codeshield-security-gate:
+  stage: security
+  needs:
+    - job: codeshield-merge-reports
+  script:
+    - |
+      echo "=== CodeShield AI Security Quality Gate ==="
+      echo "Fail threshold: $CODESHIELD_FAIL_ON"
+
+      if [ -f "codeshield-merged-results.sarif" ]; then
+          CRITICAL=$(jq '[.runs[].results[] | select(.level == "error")] | length' codeshield-merged-results.sarif 2>/dev/null || echo "0")
+          HIGH=$(jq '[.runs[].results[] | select(.level == "error")] | length' codeshield-merged-results.sarif 2>/dev/null || echo "0")
+          MEDIUM=$(jq '[.runs[].results[] | select(.level == "warning")] | length' codeshield-merged-results.sarif 2>/dev/null || echo "0")
+          LOW=$(jq '[.runs[].results[] | select(.level == "note")] | length' codeshield-merged-results.sarif 2>/dev/null || echo "0")
+      else
+          CRITICAL=0
+          HIGH=0
+          MEDIUM=0
+          LOW=0
+      fi
+
+      echo "Critical: $CRITICAL"
+      echo "High: $HIGH"
+      echo "Medium: $MEDIUM"
+      echo "Low: $LOW"
+
+      EXIT_CODE=0
+      case "$CODESHIELD_FAIL_ON" in
+          "CRITICAL")
+              [ "$CRITICAL" -gt 0 ] && EXIT_CODE=1
+              ;;
+          "HIGH")
+              [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ] && EXIT_CODE=1
+              ;;
+          "MEDIUM")
+              [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ] || [ "$MEDIUM" -gt 0 ] && EXIT_CODE=1
+              ;;
+          "LOW")
+              [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ] || [ "$MEDIUM" -gt 0 ] || [ "$LOW" -gt 0 ] && EXIT_CODE=1
+              ;;
+      esac
+
+      if [ $EXIT_CODE -ne 0 ]; then
+          echo "❌ Security gate FAILED: vulnerabilities found at or above '$CODESHIELD_FAIL_ON'"
+      else
+          echo "✅ Security gate PASSED"
+      fi
+
+      exit $EXIT_CODE
+  allow_failure: false
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"

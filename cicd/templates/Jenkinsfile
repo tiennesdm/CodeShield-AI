@@ -1,0 +1,290 @@
+// ============================================
+// CodeShield AI - Jenkins Declarative Pipeline
+// https://codeshield.ai
+//
+// Usage:
+// 1. Copy this file to your repository as 'Jenkinsfile'
+// 2. Create a credential with ID 'codeshield-api-token' (Secret text)
+// 3. Create a new Pipeline job pointing to your repository
+// 4. This pipeline is Blue Ocean compatible
+// ============================================
+
+pipeline {
+    agent any
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '50'))
+        timestamps()
+        ansiColor('xterm')
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        CODESHIELD_API_URL = 'https://api.codeshield.ai'
+        CODESHIELD_SCAN_TYPE = 'full'
+        CODESHIELD_LANGUAGES = 'python,javascript,java'
+        CODESHIELD_SEVERITY_THRESHOLD = 'MEDIUM'
+        CODESHIELD_FAIL_ON = 'HIGH'
+        CODESHIELD_TIMEOUT = '600'
+    }
+
+    stages {
+        // ============================================
+        // Stage 1: Checkout
+        // ============================================
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.GIT_BRANCH_NAME = env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown'
+                }
+            }
+        }
+
+        // ============================================
+        // Stage 2: Build
+        // ============================================
+        stage('Build') {
+            steps {
+                echo "Building application..."
+                // Add your build steps here
+            }
+        }
+
+        // ============================================
+        // Stage 3: Test
+        // ============================================
+        stage('Test') {
+            steps {
+                echo "Running tests..."
+                // Add your test steps here
+            }
+        }
+
+        // ============================================
+        // Stage 4: Security Scan (CodeShield AI)
+        // ============================================
+        stage('Security Scan') {
+            steps {
+                withCredentials([string(credentialsId: 'codeshield-api-token', variable: 'CODESHIELD_API_TOKEN')]) {
+                    script {
+                        // ANSI color definitions
+                        def RED = '\u001B[31m'
+                        def YELLOW = '\u001B[33m'
+                        def GREEN = '\u001B[32m'
+                        def CYAN = '\u001B[36m'
+                        def BOLD = '\u001B[1m'
+                        def RESET = '\u001B[0m'
+
+                        echo "${CYAN}=== CodeShield AI Security Scan ===${RESET}"
+                        echo "${CYAN}Branch: ${env.GIT_BRANCH_NAME}${RESET}"
+                        echo "${CYAN}Commit: ${env.GIT_COMMIT_SHORT}${RESET}"
+
+                        // Prepare scan configuration
+                        writeFile file: 'codeshield-config.json', text: """{
+                            \"scan_type\": \"$CODESHIELD_SCAN_TYPE\",
+                            \"languages\": ["python", "javascript", "java"],
+                            \"severity_threshold\": \"$CODESHIELD_SEVERITY_THRESHOLD\",
+                            \"output_format\": \"sarif\",
+                            \"timeout\": $CODESHIELD_TIMEOUT
+                        }"""
+
+                        // Create source archive (excluding common non-source paths)
+                        sh '''
+                            zip -r source-code.zip . \\
+                                -x '*.git/*' \\
+                                -x 'node_modules/*' \\
+                                -x '.venv/*' \\
+                                -x 'vendor/*' \\
+                                -x 'target/*' \\
+                                -x 'build/*' \\
+                                -x '*.pyc' \\
+                                -x '__pycache__/*' \\
+                                2>/dev/null || true
+                        '''
+
+                        // Start scan via CodeShield AI API
+                        def scanResponse = sh(
+                            script: '''
+                                curl -s -X POST "$CODESHIELD_API_URL/api/scan/zip" \\
+                                    -H "Authorization: Bearer $CODESHIELD_API_TOKEN" \\
+                                    -F "file=@source-code.zip" \\
+                                    -F "config=@codeshield-config.json"
+                            ''',
+                            returnStdout: true
+                        ).trim()
+
+                        def scanJson = readJSON text: scanResponse
+                        env.SCAN_ID = scanJson.scan_id
+                        echo "${CYAN}Scan started: ${env.SCAN_ID}${RESET}"
+
+                        // Poll for scan completion
+                        def status = "running"
+                        def elapsed = 0
+                        def pollInterval = 5
+
+                        while (status == "running" || status == "pending") {
+                            sleep pollInterval
+                            elapsed += pollInterval
+
+                            def statusResponse = sh(
+                                script: """
+                                    curl -s "$CODESHIELD_API_URL/api/scan/${env.SCAN_ID}/status" \\
+                                        -H "Authorization: Bearer $CODESHIELD_API_TOKEN"
+                                """,
+                                returnStdout: true
+                            ).trim()
+
+                            def statusJson = readJSON text: statusResponse
+                            status = statusJson.status
+                            def progress = statusJson.progress ?: 0
+
+                            echo "${CYAN}Scan: ${status} (${progress}%)${RESET}"
+
+                            if (elapsed > CODESHIELD_TIMEOUT.toInteger()) {
+                                error("${RED}Scan timed out after ${CODESHIELD_TIMEOUT}s${RESET}")
+                            }
+                        }
+
+                        if (status == "failed") {
+                            error("${RED}Security scan failed${RESET}")
+                        }
+
+                        // Export SARIF results
+                        sh """
+                            curl -s "$CODESHIELD_API_URL/api/export/${env.SCAN_ID}?format=sarif" \\
+                                -H "Authorization: Bearer $CODESHIELD_API_TOKEN" > codeshield-results.sarif
+                        """
+
+                        // Export HTML report
+                        sh """
+                            curl -s "$CODESHIELD_API_URL/api/export/${env.SCAN_ID}?format=html" \\
+                                -H "Authorization: Bearer $CODESHIELD_API_TOKEN" > codeshield-report.html
+                        """
+
+                        // Fetch and parse results for display
+                        sh """
+                            curl -s "$CODESHIELD_API_URL/api/scan/${env.SCAN_ID}/results" \\
+                                -H "Authorization: Bearer $CODESHIELD_API_TOKEN" > codeshield-results.json
+                        """
+
+                        def results = readJSON file: 'codeshield-results.json'
+                        def critical = results.stats?.critical ?: 0
+                        def high = results.stats?.high ?: 0
+                        def medium = results.stats?.medium ?: 0
+                        def low = results.stats?.low ?: 0
+                        def riskScore = results.risk_score ?: 0
+
+                        // Color-coded console summary
+                        echo "${BOLD}========================================${RESET}"
+                        echo "${BOLD}   CodeShield AI Scan Results${RESET}"
+                        echo "${BOLD}========================================${RESET}"
+                        echo "${RED}  Critical: ${critical}${RESET}"
+                        echo "${RED}  High:     ${high}${RESET}"
+                        echo "${YELLOW}  Medium:   ${medium}${RESET}"
+                        echo "${GREEN}  Low:      ${low}${RESET}"
+                        echo "${BOLD}  Risk:     ${riskScore}/100${RESET}"
+                        echo "${BOLD}========================================${RESET}"
+
+                        // Set build description for Blue Ocean
+                        currentBuild.description = "CodeShield: C=${critical} H=${high} M=${medium} L=${low} Risk=${riskScore}"
+                    }
+                }
+            }
+        }
+
+        // ============================================
+        // Stage 5: Security Quality Gate
+        // ============================================
+        stage('Security Quality Gate') {
+            steps {
+                script {
+                    def RED = '\u001B[31m'
+                    def GREEN = '\u001B[32m'
+                    def RESET = '\u001B[0m'
+
+                    def results = readJSON file: 'codeshield-results.json'
+                    def critical = results.stats?.critical ?: 0
+                    def high = results.stats?.high ?: 0
+                    def medium = results.stats?.medium ?: 0
+
+                    def gatePassed = true
+                    switch ("$CODESHIELD_FAIL_ON") {
+                        case "CRITICAL":
+                            if (critical > 0) gatePassed = false
+                            break
+                        case "HIGH":
+                            if (critical > 0 || high > 0) gatePassed = false
+                            break
+                        case "MEDIUM":
+                            if (critical > 0 || high > 0 || medium > 0) gatePassed = false
+                            break
+                    }
+
+                    if (!gatePassed) {
+                        echo "${RED}❌ Security quality gate FAILED${RESET}"
+                        error("Security gate failed: vulnerabilities found at or above '${CODESHIELD_FAIL_ON}' threshold")
+                    } else {
+                        echo "${GREEN}✅ Security quality gate PASSED${RESET}"
+                    }
+                }
+            }
+        }
+
+        // ============================================
+        // Stage 6: Deploy (gated by security scan)
+        // ============================================
+        stage('Deploy') {
+            when {
+                expression {
+                    currentBuild.result == null || currentBuild.result == 'SUCCESS'
+                }
+            }
+            steps {
+                echo "Deploying application..."
+                // Add deployment steps here
+            }
+        }
+    }
+
+    // ============================================
+    // Post-build Actions
+    // ============================================
+    post {
+        always {
+            // Archive SARIF and HTML reports
+            archiveArtifacts artifacts: 'codeshield-results.sarif,codeshield-report.html', allowEmptyArchive: true
+
+            // Publish HTML report for Blue Ocean
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: '.',
+                reportFiles: 'codeshield-report.html',
+                reportName: 'CodeShield AI Security Report'
+            ])
+
+            // Cleanup workspace
+            cleanWs(deleteDirs: true, notFailBuild: true)
+        }
+
+        failure {
+            script {
+                def RED = '\u001B[31m'
+                def RESET = '\u001B[0m'
+                echo "${RED}Pipeline failed due to security findings or errors${RESET}"
+            }
+        }
+
+        unstable {
+            script {
+                def YELLOW = '\u001B[33m'
+                def RESET = '\u001B[0m'
+                echo "${YELLOW}Pipeline unstable - security warnings detected${RESET}"
+            }
+        }
+    }
+}

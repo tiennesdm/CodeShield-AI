@@ -1,0 +1,97 @@
+{
+  "records": {
+    "v-f1": {
+      "id": "b43ec1ab-1068-4689-8a04-b1667c7f8895",
+      "vulnerability_id": "v-f1",
+      "scan_id": "s1",
+      "severity": "CRITICAL",
+      "title": null,
+      "category": null,
+      "detected_at": "2026-05-25 19:39:09.267870+00:00",
+      "sla_deadline": "2026-05-28 19:39:09.267870+00:00",
+      "assigned_to": null,
+      "assigned_at": null,
+      "remediated_at": null,
+      "dismissed_at": null,
+      "dismissed_reason": null,
+      "status": "open",
+      "events": [
+        {
+          "event_type": "detected",
+          "timestamp": "2026-05-25 19:39:09.267870+00:00",
+          "actor_id": null,
+          "notes": "Vulnerability detected with severity CRITICAL"
+        }
+      ],
+      "reminders_sent": 0,
+      "last_reminder_at": null,
+      "escalations_sent": 0,
+      "last_escalation_at": null,
+      "breach_duration_hours": null,
+      "time_to_remediate_hours": null,
+      "metadata": {}
+    },
+    "v-f2": {
+      "id": "cd3a7e75-324b-4a84-a55b-b0503b279629",
+      "vulnerability_id": "v-f2",
+      "scan_id": "s2",
+      "severity": "HIGH",
+      "title": null,
+      "category": null,
+      "detected_at": "2026-05-25 19:39:09.268304+00:00",
+      "sla_deadline": "2026-06-09 19:39:09.268304+00:00",
+      "assigned_to": null,
+      "assigned_at": null,
+      "remediated_at": null,
+      "dismissed_at": null,
+      "dismissed_reason": null,
+      "status": "open",
+      "events": [
+        {
+          "event_type": "detected",
+          "timestamp": "2026-05-25 19:39:09.268304+00:00",
+          "actor_id": null,
+          "notes": "Vulnerability detected with severity HIGH"
+        }
+      ],
+      "reminders_sent": 0,
+      "last_reminder_at": null,
+      "escalations_sent": 0,
+      "last_escalation_at": null,
+      "breach_duration_hours": null,
+      "time_to_remediate_hours": null,
+      "metadata": {}
+    }
+  },
+  "alerts": [],
+  "sla_definitions": {
+    "CRITICAL": {
+      "severity": "CRITICAL",
+      "days_to_remediate": 3,
+      "reminder_days": 1,
+      "escalation_days": 1,
+      "description": "Critical vulnerabilities must be remediated within 7 calendar days"
+    },
+    "HIGH": {
+      "severity": "HIGH",
+      "days_to_remediate": 15,
+      "reminder_days": 3,
+      "escalation_days": 2,
+      "description": "High severity vulnerabilities must be remediated within 15 calendar days"
+    },
+    "MEDIUM": {
+      "severity": "MEDIUM",
+      "days_to_remediate": 30,
+      "reminder_days": 5,
+      "escalation_days": 3,
+      "description": "Medium severity vulnerabilities must be remediated within 30 calendar days"
+    },
+    "LOW": {
+      "severity": "LOW",
+      "days_to_remediate": 90,
+      "reminder_days": 14,
+      "escalation_days": 7,
+      "description": "Low severity vulnerabilities must be remediated within 90 calendar days"
+    }
+  }
+}
