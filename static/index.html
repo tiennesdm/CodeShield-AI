@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeShield AI | Advanced Security Scanner</title>
+  <meta name="description" content="A comprehensive, production-ready code vulnerability scanning engine that runs multiple open-source SAST tools, secret checkers, and custom AI regex engines.">
+  
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/feather-icons"></script>
+  
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+  <!-- App Shell -->
+  <div class="app-container">
+    
+    <!-- Sidebar for Scan History -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <i data-feather="shield" class="logo-icon"></i>
+          <span>CodeShield <span class="accent">AI</span></span>
+        </div>
+      </div>
+      
+      <div class="sidebar-content">
+        <div class="section-title">
+          <i data-feather="clock" class="section-icon"></i>
+          <span>Audit History</span>
+        </div>
+        <div class="scan-history-list" id="scan-history-list">
+          <div class="empty-history">No past scans loaded</div>
+        </div>
+      </div>
+      
+      <div class="sidebar-footer">
+        <div class="status-indicator">
+          <span class="pulse-dot" id="status-dot"></span>
+          <span id="status-text">Checking Backend...</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Top Navigation -->
+      <header class="top-nav">
+        <div class="nav-left">
+          <button id="toggle-sidebar-btn" class="icon-btn" title="Toggle Sidebar">
+            <i data-feather="menu"></i>
+          </button>
+          <h1>Security Dashboard</h1>
+        </div>
+        <div class="nav-right">
+          <div class="stats-mini-summary" id="stats-mini-summary">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </header>
+
+      <!-- Dashboard View Container -->
+      <div class="view-container" id="view-container">
+        
+        <!-- Welcome / Control Panel Grid -->
+        <section class="control-panel-grid" id="welcome-view">
+          
+          <!-- Welcome and Instructions -->
+          <div class="welcome-card card">
+            <h2>Welcome to CodeShield AI</h2>
+            <p>Perform automated static application security audits (SAST) on your codebases. CodeShield AI automatically detects programming languages, runs targeted scanning tools, and evaluates overall security risks.</p>
+            
+            <div class="feature-bullets">
+              <div class="bullet-item">
+                <i data-feather="check-circle" class="bullet-icon success"></i>
+                <div>
+                  <strong>Multi-Language Audit</strong>
+                  <span>Supports Python, Javascript/Typescript, Java, Go, Ruby, and more.</span>
+                </div>
+              </div>
+              <div class="bullet-item">
+                <i data-feather="check-circle" class="bullet-icon success"></i>
+                <div>
+                  <strong>Secret Detection</strong>
+                  <span>Scans for API keys, bearer tokens, passwords, and private certificates.</span>
+                </div>
+              </div>
+              <div class="bullet-item">
+                <i data-feather="check-circle" class="bullet-icon success"></i>
+                <div>
+                  <strong>Detailed Remediation</strong>
+                  <span>Returns localized suggestions and CWE classification mapping.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Configuration & Trigger Card -->
+          <div class="config-card card">
+            <div class="tabs">
+              <button class="tab-btn active" id="tab-zip" onclick="switchTab('zip')">
+                <i data-feather="file-text"></i> ZIP Archive
+              </button>
+              <button class="tab-btn" id="tab-github" onclick="switchTab('github')">
+                <i data-feather="github"></i> GitHub URL
+              </button>
+            </div>
+            
+            <!-- ZIP Form -->
+            <form id="zip-form" class="tab-content active" onsubmit="submitZip(event)">
+              <div class="form-group">
+                <label>Upload Codebase ZIP</label>
+                <div class="drag-drop-zone" id="drop-zone">
+                  <i data-feather="upload-cloud" class="upload-icon"></i>
+                  <p>Drag & drop your codebase ZIP archive here, or <span class="browse-link">browse files</span></p>
+                  <span class="file-info" id="selected-file-info"></span>
+                  <input type="file" id="zip-file-input" accept=".zip" required style="display: none;">
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label for="zip-scan-name">Project Name (Optional)</label>
+                <input type="text" id="zip-scan-name" placeholder="E.g., Web App Beta">
+              </div>
+              
+              <button type="button" class="collapsible-trigger" onclick="toggleAdvancedSettings('zip')">
+                <span>Advanced Scan Settings</span>
+                <i data-feather="chevron-down" id="adv-chevron-zip"></i>
+              </button>
+              
+              <div class="advanced-settings hidden" id="advanced-settings-zip">
+                <div class="form-group">
+                  <label>Scanners to Enable</label>
+                  <div class="checkbox-grid">
+                    <label class="checkbox-container">Custom AI Scanner
+                      <input type="checkbox" name="tools" value="custom_ai" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                    <label class="checkbox-container">Semgrep
+                      <input type="checkbox" name="tools" value="semgrep" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                    <label class="checkbox-container">Bandit (Python)
+                      <input type="checkbox" name="tools" value="bandit" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                    <label class="checkbox-container">ESLint (JS/TS)
+                      <input type="checkbox" name="tools" value="eslint" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                    <label class="checkbox-container">Gitleaks (Secrets)
+                      <input type="checkbox" name="tools" value="gitleaks" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                    <label class="checkbox-container">Pylint (Python)
+                      <input type="checkbox" name="tools" value="pylint" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              
+              <button type="submit" class="submit-btn" id="zip-submit-btn">
+                <span>Launch Security Audit</span>
+                <i data-feather="play"></i>
+              </button>
+            </form>
+
+            <!-- GitHub Form -->
+            <form id="github-form" class="tab-content" onsubmit="submitGithub(event)">
+              <div class="form-group">
+                <label for="github-url-input">GitHub Repository URL</label>
+                <div class="input-with-icon">
+                  <i data-feather="link" class="input-icon"></i>
+                  <input type="url" id="github-url-input" placeholder="https://github.com/username/repo" required>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label for="github-scan-name">Project Name (Optional)</label>
+                <input type="text" id="github-scan-name" placeholder="E.g., Production API">
+              </div>
+              
+              <button type="button" class="collapsible-trigger" onclick="toggleAdvancedSettings('github')">
+                <span>Advanced Scan Settings</span>
+                <i data-feather="chevron-down" id="adv-chevron-github"></i>
+              </button>
+              
+              <div class="advanced-settings hidden" id="advanced-settings-github">
+                <div class="form-group">
+                  <label>Scanners to Enable</label>
+                  <div class="checkbox-grid">
+                    <label class="checkbox-container">Custom AI Scanner
+                      <input type="checkbox" name="github_tools" value="custom_ai" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                    <label class="checkbox-container">Semgrep
+                      <input type="checkbox" name="github_tools" value="semgrep" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                    <label class="checkbox-container">Bandit (Python)
+                      <input type="checkbox" name="github_tools" value="bandit" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                    <label class="checkbox-container">ESLint (JS/TS)
+                      <input type="checkbox" name="github_tools" value="eslint" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                    <label class="checkbox-container">Gitleaks (Secrets)
+                      <input type="checkbox" name="github_tools" value="gitleaks" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                    <label class="checkbox-container">Pylint (Python)
+                      <input type="checkbox" name="github_tools" value="pylint" checked>
+                      <span class="checkmark"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              
+              <button type="submit" class="submit-btn" id="github-submit-btn">
+                <span>Launch Security Audit</span>
+                <i data-feather="play"></i>
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <!-- Scanning / Progress View -->
+        <section class="scanning-view card hidden" id="scanning-view">
+          <div class="scanning-header">
+            <div class="scanning-title-group">
+              <h2 id="scanning-project-name">Scanning Project...</h2>
+              <span class="scan-id-tag">ID: <span id="scanning-scan-id">-</span></span>
+            </div>
+            <div class="loader-spinner"></div>
+          </div>
+          
+          <div class="progress-container">
+            <div class="progress-labels">
+              <span id="progress-phase">Initializing Scan...</span>
+              <span id="progress-percent">0%</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+          
+          <div class="console-box">
+            <div class="console-header">
+              <span>Scan Event Logs</span>
+              <span class="console-dot green"></span>
+            </div>
+            <div class="console-log" id="console-log">
+              <!-- Logs populated dynamically -->
+            </div>
+          </div>
+        </section>
+
+        <!-- Scan Results View -->
+        <section class="results-view hidden" id="results-view">
+          
+          <!-- Back button / Export Options -->
+          <div class="results-toolbar">
+            <button class="back-btn" onclick="showDashboard()">
+              <i data-feather="arrow-left"></i> Back to Dashboard
+            </button>
+            <div class="export-options" style="display: flex; gap: 12px;">
+              <button class="export-btn pdf" id="download-pdf-btn">
+                <i data-feather="download"></i> Export PDF Report
+              </button>
+              <button class="export-btn zip" id="download-zip-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);">
+                <i data-feather="download"></i> Download Patched Code
+              </button>
+            </div>
+          </div>
+          
+          <!-- Scan Metadata Header -->
+          <div class="results-header-card card">
+            <div class="header-main-info">
+              <div>
+                <h2 id="results-project-name">Project Scan Results</h2>
+                <div class="meta-row">
+                  <span class="meta-item"><i data-feather="tag"></i> ID: <span id="results-scan-id">-</span></span>
+                  <span class="meta-item"><i data-feather="code"></i> Languages: <span id="results-languages">-</span></span>
+                  <span class="meta-item"><i data-feather="folder"></i> Files scanned: <span id="results-total-files">-</span></span>
+                  <span class="meta-item"><i data-feather="clock"></i> Duration: <span id="results-duration">-</span>s</span>
+                </div>
+              </div>
+              <div class="risk-gauge-container">
+                <div class="risk-score-value" id="results-risk-score">0</div>
+                <div class="risk-score-label">Risk Score</div>
+              </div>
+            </div>
+            
+            <div class="severity-bars-grid" id="severity-stats-grid">
+              <div class="severity-stat-card critical" onclick="filterFindings('CRITICAL')">
+                <span class="sev-count" id="count-critical">0</span>
+                <span class="sev-name">Critical</span>
+              </div>
+              <div class="severity-stat-card high" onclick="filterFindings('HIGH')">
+                <span class="sev-count" id="count-high">0</span>
+                <span class="sev-name">High</span>
+              </div>
+              <div class="severity-stat-card medium" onclick="filterFindings('MEDIUM')">
+                <span class="sev-count" id="count-medium">0</span>
+                <span class="sev-name">Medium</span>
+              </div>
+              <div class="severity-stat-card low" onclick="filterFindings('LOW')">
+                <span class="sev-count" id="count-low">0</span>
+                <span class="sev-name">Low</span>
+              </div>
+              <div class="severity-stat-card info" onclick="filterFindings('INFO')">
+                <span class="sev-count" id="count-info">0</span>
+                <span class="sev-name">Info</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Findings Filters & List -->
+          <div class="findings-container">
+            <div class="findings-header">
+              <h3>Vulnerabilities Detected (<span id="findings-total-count">0</span>)</h3>
+              <div class="filter-bar">
+                <input type="text" id="finding-search" placeholder="Search file, title, or category..." oninput="applyFilters()">
+                <select id="severity-filter" onchange="applyFilters()">
+                  <option value="ALL">All Severities</option>
+                  <option value="CRITICAL">Critical</option>
+                  <option value="HIGH">High</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="LOW">Low</option>
+                  <option value="INFO">Info</option>
+                </select>
+              </div>
+            </div>
+            
+            <div class="findings-list" id="findings-list">
+              <!-- Vulnerability cards loaded dynamically -->
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

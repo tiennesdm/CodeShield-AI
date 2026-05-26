@@ -39,19 +39,19 @@ SQL_INJECTION_FIXES: List[Tuple[str, str, str]] = [
     # Python f-string in execute
     (
         r'cursor\.execute\s*\(\s*f["\'].*\{(.*?)\}.*["\']\s*\)',
-        'cursor.execute("SELECT * FROM table WHERE col = ?", (\1,))',
+        r'cursor.execute("SELECT * FROM table WHERE col = ?", (\1,))',
         "Parameterized query with placeholder",
     ),
     # Python % formatting
     (
         r'cursor\.execute\s*\(\s*["\'].*%s.*["\']\s*%\s*(\w+)\s*\)',
-        'cursor.execute("SELECT * FROM table WHERE col = %s", (\1,))',
+        r'cursor.execute("SELECT * FROM table WHERE col = %s", (\1,))',
         "Parameterized query with tuple",
     ),
     # Python .format()
     (
         r'cursor\.execute\s*\(\s*["\'].*\{.*\}.*["\']\.format\s*\(\s*(.*?)\s*\)\s*\)',
-        'cursor.execute("SELECT * FROM table WHERE col = ?", (\1,))',
+        r'cursor.execute("SELECT * FROM table WHERE col = ?", (\1,))',
         "Parameterized query replacing format",
     ),
 ]
@@ -104,17 +104,17 @@ PATH_TRAVERSAL_FIXES: List[Tuple[str, str, str]] = [
 WEAK_CRYPTO_FIXES: List[Dict[str, Any]] = [
     {
         "pattern": r'hashlib\.md5\s*\(',
-        "replacement": 'hashlib.sha256(  # SECURITY FIX: Use SHA-256 instead of MD5',
+        "replacement": 'hashlib.sha256(',
         "description": "Replace MD5 with SHA-256",
     },
     {
         "pattern": r'hashlib\.sha1\s*\(',
-        "replacement": 'hashlib.sha256(  # SECURITY FIX: Use SHA-256 instead of SHA-1',
+        "replacement": 'hashlib.sha256(',
         "description": "Replace SHA-1 with SHA-256",
     },
     {
         "pattern": r'\bmd5\s*\(',
-        "replacement": 'hashlib.sha256(  # SECURITY FIX: MD5 is cryptographically broken',
+        "replacement": 'hashlib.sha256(',
         "description": "Replace md5() with SHA-256",
     },
 ]
@@ -590,7 +590,7 @@ Provide ONLY the fixed code in a code block. Do not explain."""
         Validate a generated fix.
 
         Checks:
-        - Syntax validity (ast.parse)
+        - Syntax validity (ast.parse for Python)
         - Pattern verification (fix addresses vulnerability)
         - Style preservation
 
@@ -609,46 +609,52 @@ Provide ONLY the fixed code in a code block. Do not explain."""
             "error": None,
         }
 
-        # 1. Syntax validation
-        try:
-            ast.parse(fixed_code)
+        # 1. Syntax validation (Python only)
+        is_python = vuln.file_path and vuln.file_path.lower().endswith(".py")
+        if is_python:
+            try:
+                ast.parse(fixed_code)
+                result["syntax_valid"] = True
+            except SyntaxError as e:
+                result["error"] = f"Syntax error in fix: {e}"
+                return result
+        else:
             result["syntax_valid"] = True
-        except SyntaxError as e:
-            result["error"] = f"Syntax error in fix: {e}"
-            return result
 
         # 2. Pattern verification - check vulnerability pattern is removed
+        # Strip comments from fixed_code for validation checks to prevent false negatives from comments containing forbidden words
+        clean_code = "\n".join(line.split("#")[0].split("//")[0] for line in fixed_code.splitlines())
         cat_lower = vuln.category.lower()
 
         if "sql" in cat_lower and "injection" in cat_lower:
             # Check that f-strings and string formatting are removed from SQL
-            if not re.search(r'execute\s*\(\s*f[\"\']', fixed_code, re.IGNORECASE):
-                if "?" in fixed_code or "%s" in fixed_code or "placeholder" in fixed_code.lower():
+            if not re.search(r'execute\s*\(\s*f[\"\']', clean_code, re.IGNORECASE):
+                if "?" in clean_code or "%s" in clean_code or "placeholder" in clean_code.lower():
                     result["pattern_addressed"] = True
 
         elif "xss" in cat_lower:
-            if "innerHTML" not in fixed_code and "document.write" not in fixed_code:
+            if "innerHTML" not in clean_code and "document.write" not in clean_code:
                 result["pattern_addressed"] = True
 
         elif "eval" in cat_lower or "code injection" in cat_lower:
-            if "eval(" not in fixed_code:
+            if "eval(" not in clean_code:
                 result["pattern_addressed"] = True
 
         elif "secret" in cat_lower or "credential" in cat_lower:
-            if "os.environ" in fixed_code or "getenv" in fixed_code:
+            if "os.environ" in clean_code or "getenv" in clean_code:
                 result["pattern_addressed"] = True
 
         elif "crypto" in cat_lower or "md5" in cat_lower or "sha1" in cat_lower:
-            if "md5(" not in fixed_code.lower() and "sha1(" not in fixed_code.lower():
+            if "md5(" not in clean_code.lower() and "sha1(" not in clean_code.lower():
                 result["pattern_addressed"] = True
 
         elif "cors" in cat_lower:
-            if "*" not in fixed_code or "your-domain" in fixed_code:
+            if "*" not in clean_code or "your-domain" in clean_code:
                 result["pattern_addressed"] = True
 
         else:
             # For other categories, check if code changed
-            result["pattern_addressed"] = original_code != fixed_code
+            result["pattern_addressed"] = original_code != clean_code
 
         # 3. Style preservation - check indentation is maintained
         orig_indent = self._get_min_indent(original_code)
@@ -691,7 +697,10 @@ Provide ONLY the fixed code in a code block. Do not explain."""
             tofile=f"b/{file_path}",
         )
 
-        return "".join(diff)
+        diff_list = list(diff)
+        if not diff_list:
+            return f"--- a/{file_path}\n+++ b/{file_path}\n"
+        return "".join(diff_list)
 
     def _get_vulnerable_code(
         self,
