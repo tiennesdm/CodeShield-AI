@@ -56,11 +56,18 @@ class JSONDatabase:
                 return obj.isoformat()
             raise TypeError(f"Type {type(obj)} not serializable")
 
+        temp_file_path = file_path.with_name(f"{scan_result.scan_id}.{os.getpid()}.tmp")
         try:
-            async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+            async with aiofiles.open(temp_file_path, "w", encoding="utf-8") as f:
                 await f.write(json.dumps(data, default=serialize_datetime, indent=2))
+            await asyncio.to_thread(os.replace, temp_file_path, file_path)
             logger.debug("Saved scan %s to %s", scan_result.scan_id, file_path)
         except Exception as e:
+            if temp_file_path.exists():
+                try:
+                    temp_file_path.unlink()
+                except Exception:
+                    pass
             logger.error("Failed to save scan %s: %s", scan_result.scan_id, e)
             raise
 
