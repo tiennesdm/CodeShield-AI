@@ -23,7 +23,9 @@ import io
 import json
 import os
 import sys
+import tempfile
 import time
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -426,6 +428,107 @@ def scan_github(
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         sys.exit(EXIT_ERROR)
+
+
+@scan_group.command(name="directory")
+@click.argument("path", type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True))
+@click.option("--name", "-n", help="Scan name")
+@click.option("--severity-filter", "-s", multiple=True, help="Severity levels to include")
+@click.option("--tools", "-t", help="Comma-separated list of tools to run")
+@click.option("--output-format", "-f", type=click.Choice(["json", "sarif", "junit", "html"]), default=None, help="Output format")
+@click.option("--output-file", "-o", type=click.Path(), help="Write output to file")
+@click.option("--wait/--no-wait", default=True, help="Wait for scan to complete")
+@click.pass_context
+def scan_directory(
+    ctx: click.Context,
+    path: str,
+    name: Optional[str],
+    severity_filter: tuple,
+    tools: Optional[str],
+    output_format: Optional[str],
+    output_file: Optional[str],
+    wait: bool,
+) -> None:
+    """Scan a local directory containing source code."""
+    api_url = ctx.obj["api_url"]
+    exit_code = EXIT_OK
+
+    abs_path = os.path.abspath(path)
+    scan_name = name or os.path.basename(abs_path) or "local_directory"
+
+    temp_zip = None
+    try:
+        with console.status("[bold green]Compressing local directory..."):
+            fd, temp_zip_path = tempfile.mkstemp(suffix=".zip")
+            os.close(fd)
+            temp_zip = temp_zip_path
+
+            with zipfile.ZipFile(temp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(abs_path):
+                    # Exclude common directories to keep upload fast
+                    dirs[:] = [d for d in dirs if d not in ('.git', 'node_modules', '.venv', 'venv', '__pycache__', '.pytest_cache')]
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        if file_path == temp_zip_path:
+                            continue
+                        rel_path = os.path.relpath(file_path, abs_path)
+                        zipf.write(file_path, rel_path)
+
+        with console.status("[bold green]Uploading compressed directory to server..."):
+            with open(temp_zip, "rb") as f:
+                files = {"file": (f"{scan_name}.zip", f, "application/zip")}
+                data = {"name": scan_name}
+
+                scan_config: Dict[str, Any] = {}
+                if severity_filter:
+                    scan_config["severity_filters"] = list(severity_filter)
+                if tools:
+                    scan_config["tools"] = [t.strip() for t in tools.split(",")]
+                if scan_config:
+                    data["config"] = json.dumps(scan_config)
+
+                resp = httpx.post(
+                    f"{api_url}/api/scan/zip",
+                    files=files,
+                    data=data,
+                    timeout=180,
+                )
+                resp.raise_for_status()
+
+        result = resp.json()
+        scan_id = result["scan_id"]
+        console.print(f"[green]Scan started on local directory. ID: {scan_id}[/green]")
+
+        if not wait:
+            return
+
+        final_status = poll_scan_status(scan_id, api_url)
+        if not final_status:
+            sys.exit(EXIT_ERROR)
+
+        if final_status.get("status") == "failed":
+            console.print(f"[red]Scan failed: {final_status.get('error', 'Unknown error')}[/red]")
+            sys.exit(EXIT_ERROR)
+
+        _fetch_and_display_results(ctx, scan_id, severity_filter, output_format, output_file)
+
+    except httpx.HTTPStatusError as e:
+        console.print(f"[red]API error: {e.response.status_code} - {e.response.text}[/red]")
+        sys.exit(EXIT_ERROR)
+    except httpx.RequestError as e:
+        console.print(f"[red]Connection error: {e}[/red]")
+        sys.exit(EXIT_ERROR)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(EXIT_ERROR)
+    finally:
+        if temp_zip and os.path.exists(temp_zip):
+            try:
+                os.remove(temp_zip)
+            except Exception:
+                pass
+
+    sys.exit(exit_code)
 
 
 @scan_group.command(name="status")
