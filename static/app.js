@@ -451,7 +451,13 @@ const scanAgents = [
     role: 'SAST Auditor',
     desc: 'Analyzes code for common vulnerabilities and quality issues.',
     icon: 'cpu',
-    range: [10, 60]
+    range: [10, 60],
+    activities: {
+      pending: 'Awaiting scan initiation...',
+      running: 'Scanning files with Bandit, Semgrep, and ESLint...',
+      completed: 'Analysis finished. Findings parsed.',
+      failed: 'SAST code scan aborted.'
+    }
   },
   {
     id: 'sam',
@@ -459,7 +465,13 @@ const scanAgents = [
     role: 'Secret Detector',
     desc: 'Scans files for hardcoded passwords, tokens, and private keys.',
     icon: 'key',
-    range: [15, 60]
+    range: [15, 60],
+    activities: {
+      pending: 'Awaiting credentials scan window...',
+      running: 'Checking for hardcoded API keys, certs, and entropy patterns...',
+      completed: 'Secrets detection complete.',
+      failed: 'Secrets scan failed.'
+    }
   },
   {
     id: 'pam',
@@ -467,7 +479,13 @@ const scanAgents = [
     role: 'SCA Analyst',
     desc: 'Checks packages and dependencies for known CVE vulnerabilities.',
     icon: 'package',
-    range: [20, 60]
+    range: [20, 60],
+    activities: {
+      pending: 'Awaiting lockfile parsing...',
+      running: 'Checking package-lock.json & requirements.txt against CVE databases...',
+      completed: 'SCA dependency checks complete.',
+      failed: 'Dependency checks failed.'
+    }
   },
   {
     id: 'tina',
@@ -475,7 +493,13 @@ const scanAgents = [
     role: 'Taint Analyzer',
     desc: 'Traces data flow to detect injection risks and input issues.',
     icon: 'activity',
-    range: [60, 80]
+    range: [60, 80],
+    activities: {
+      pending: 'Awaiting dataflow model construction...',
+      running: 'Tracing source-to-sink dataflow paths for injections...',
+      completed: 'Dataflow taint tracking complete.',
+      failed: 'Taint analysis aborted.'
+    }
   },
   {
     id: 'triager',
@@ -483,7 +507,13 @@ const scanAgents = [
     role: 'Governance Agent',
     desc: 'Triage findings and deduplicate overlapping alerts.',
     icon: 'shield',
-    range: [80, 90]
+    range: [80, 90],
+    activities: {
+      pending: 'Awaiting raw findings...',
+      running: 'Deduplicating findings and evaluating security policies...',
+      completed: 'Triaged and grouped all valid findings.',
+      failed: 'Triage checks aborted.'
+    }
   },
   {
     id: 'fixer',
@@ -491,7 +521,13 @@ const scanAgents = [
     role: 'Remediation Engineer',
     desc: 'Generates automated code suggestions and fixes.',
     icon: 'tool',
-    range: [90, 95]
+    range: [90, 95],
+    activities: {
+      pending: 'Awaiting triage feedback...',
+      running: 'Generating code rewrite patches and AST syntax fixes...',
+      completed: 'Auto-remediation suggestions compiled.',
+      failed: 'Remediation generation failed.'
+    }
   },
   {
     id: 'assembler',
@@ -499,7 +535,13 @@ const scanAgents = [
     role: 'Compliance Officer',
     desc: 'Compiles details, calculates risk score, and prepares report.',
     icon: 'file-text',
-    range: [95, 100]
+    range: [95, 100],
+    activities: {
+      pending: 'Awaiting remediation stats...',
+      running: 'Calculating risk levels and generating compliance report...',
+      completed: 'Scan report compiled successfully.',
+      failed: 'Report assembly aborted.'
+    }
   }
 ];
 
@@ -532,15 +574,20 @@ function renderAgentSwarm(percent, scanStatus) {
     }
     
     let statusBadgeHtml = '';
+    let activityText = '';
     
     if (agentStatus === 'pending') {
       statusBadgeHtml = `<span class="agent-status-badge"><i data-feather="clock"></i> Pending</span>`;
+      activityText = agent.activities.pending;
     } else if (agentStatus === 'running') {
       statusBadgeHtml = `<span class="agent-status-badge"><i data-feather="loader" class="agent-spinner"></i> Active</span>`;
+      activityText = agent.activities.running;
     } else if (agentStatus === 'completed') {
       statusBadgeHtml = `<span class="agent-status-badge"><i data-feather="check-circle"></i> Done</span>`;
+      activityText = agent.activities.completed;
     } else if (agentStatus === 'failed') {
       statusBadgeHtml = `<span class="agent-status-badge"><i data-feather="alert-circle"></i> Failed</span>`;
+      activityText = agent.activities.failed;
     }
     
     html += `
@@ -552,6 +599,7 @@ function renderAgentSwarm(percent, scanStatus) {
           <div class="agent-info">
             <span class="agent-name">${agent.name} <span class="agent-role">(${agent.role})</span></span>
             <span class="agent-desc" title="${agent.desc}">${agent.desc}</span>
+            <span class="agent-activity-status">${activityText}</span>
           </div>
         </div>
         ${statusBadgeHtml}
@@ -563,11 +611,47 @@ function renderAgentSwarm(percent, scanStatus) {
   feather.replace();
 }
 
+function updateConceptHighlights(percent, scanStatus) {
+  const ids = ['concept-agentic', 'concept-llm', 'concept-design', 'concept-responsible', 'concept-security'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('highlighted');
+  });
+  
+  if (scanStatus === 'failed') return;
+  
+  if (scanStatus === 'running' || scanStatus === 'completed') {
+    const el = document.getElementById('concept-design');
+    if (el) el.classList.add('highlighted');
+  }
+  
+  if ((scanStatus === 'running' && percent >= 10 && percent < 95) || scanStatus === 'completed') {
+    const el = document.getElementById('concept-agentic');
+    if (el) el.classList.add('highlighted');
+  }
+  
+  if ((scanStatus === 'running' && percent >= 80 && percent < 95) || scanStatus === 'completed') {
+    const el = document.getElementById('concept-llm');
+    if (el) el.classList.add('highlighted');
+  }
+  
+  if ((scanStatus === 'running' && percent >= 80) || scanStatus === 'completed') {
+    const el = document.getElementById('concept-responsible');
+    if (el) el.classList.add('highlighted');
+  }
+  
+  if ((scanStatus === 'running' && percent >= 90 && percent < 95) || scanStatus === 'completed') {
+    const el = document.getElementById('concept-security');
+    if (el) el.classList.add('highlighted');
+  }
+}
+
 function updateProgress(percent, phaseText, status) {
   docElements.progressPhase.textContent = phaseText;
   docElements.progressPercent.textContent = `${percent}%`;
   docElements.progressBarFill.style.width = `${percent}%`;
   renderAgentSwarm(percent, status);
+  updateConceptHighlights(percent, status);
 }
 
 // Render Results View

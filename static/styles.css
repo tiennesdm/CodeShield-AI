@@ -682,11 +682,115 @@ input:focus, select:focus {
 }
 
 /* Scanning / Loading Screen */
-.scanning-view {
-  margin-top: 10vh;
-  max-width: 600px;
-  margin-left: auto;
-  margin-right: auto;
+.scanning-view-container {
+  max-width: 1200px;
+  margin: 4vh auto;
+}
+
+.scanning-layout-grid {
+  display: grid;
+  grid-template-columns: 7fr 5fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .scanning-layout-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.scanning-engine-column, .scanning-concepts-column {
+  margin: 0;
+  height: auto;
+}
+
+.concepts-section-title {
+  font-family: var(--font-title);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-main);
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-light);
+  text-align: start;
+}
+
+.concept-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.concept-card {
+  display: flex;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.005);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.45;
+  filter: grayscale(100%);
+  text-align: start;
+}
+
+.concept-card.highlighted {
+  opacity: 1;
+  filter: none;
+  background: rgba(99, 102, 241, 0.03);
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.08);
+  transform: translateX(4px);
+}
+
+.concept-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.concept-card.highlighted .concept-icon-wrapper {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+  filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.4));
+}
+
+.concept-icon-wrapper i {
+  width: 20px;
+  height: 20px;
+}
+
+.concept-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.concept-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  transition: color 0.3s ease;
+}
+
+.concept-card.highlighted .concept-title {
+  color: var(--color-text-main);
+}
+
+.concept-description {
+  font-size: 12px;
+  color: var(--color-text-dark);
+  line-height: 1.5;
 }
 
 .scanning-header {
@@ -909,6 +1013,28 @@ input:focus, select:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.agent-activity-status {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-dark);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.agent-card.running .agent-activity-status {
+  color: var(--accent);
+}
+
+.agent-card.completed .agent-activity-status {
+  color: var(--color-low);
+}
+
+.agent-card.failed .agent-activity-status {
+  color: var(--color-critical);
 }
 
 .agent-status-badge {

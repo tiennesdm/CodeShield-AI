@@ -232,41 +232,106 @@
         </section>
 
         <!-- Scanning / Progress View -->
-        <section class="scanning-view card hidden" id="scanning-view">
-          <div class="scanning-header">
-            <div class="scanning-title-group">
-              <h2 id="scanning-project-name">Scanning Project...</h2>
-              <span class="scan-id-tag">ID: <span id="scanning-scan-id">-</span></span>
-            </div>
-            <div class="loader-spinner"></div>
-          </div>
-          
-          <div class="progress-container">
-            <div class="progress-labels">
-              <span id="progress-phase">Initializing Scan...</span>
-              <span id="progress-percent">0%</span>
-            </div>
-            <div class="progress-bar-bg">
-              <div class="progress-bar-fill" id="progress-bar-fill" style="width: 0%;"></div>
-            </div>
-          </div>
+        <section class="scanning-view-container hidden" id="scanning-view">
+          <div class="scanning-layout-grid">
+            
+            <!-- Left Column: Scan Engine Progress -->
+            <div class="scanning-engine-column card">
+              <div class="scanning-header">
+                <div class="scanning-title-group">
+                  <h2 id="scanning-project-name">Scanning Project...</h2>
+                  <span class="scan-id-tag">ID: <span id="scanning-scan-id">-</span></span>
+                </div>
+                <div class="loader-spinner"></div>
+              </div>
+              
+              <div class="progress-container">
+                <div class="progress-labels">
+                  <span id="progress-phase">Initializing Scan...</span>
+                  <span id="progress-percent">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div class="progress-bar-fill" id="progress-bar-fill" style="width: 0%;"></div>
+                </div>
+              </div>
 
-          <!-- Agent Swarm Activity Dashboard -->
-          <div class="agent-swarm-section">
-            <h3 class="swarm-title">Agent Swarm Activity</h3>
-            <div class="agent-grid" id="agent-swarm-grid">
-              <!-- Dynamically populated agents -->
+              <!-- Agent Swarm Activity Dashboard -->
+              <div class="agent-swarm-section">
+                <h3 class="swarm-title">Agent Swarm Activity</h3>
+                <div class="agent-grid" id="agent-swarm-grid">
+                  <!-- Dynamically populated agents -->
+                </div>
+              </div>
+              
+              <div class="console-box">
+                <div class="console-header">
+                  <span>Scan Event Logs</span>
+                  <span class="console-dot green"></span>
+                </div>
+                <div class="console-log" id="console-log">
+                  <!-- Logs populated dynamically -->
+                </div>
+              </div>
             </div>
-          </div>
-          
-          <div class="console-box">
-            <div class="console-header">
-              <span>Scan Event Logs</span>
-              <span class="console-dot green"></span>
+            
+            <!-- Right Column: Concepts & System Architecture Reference -->
+            <div class="scanning-concepts-column card">
+              <h3 class="concepts-section-title">Responsible AI & Security Concepts</h3>
+              <div class="concept-cards-list">
+                
+                <div class="concept-card" id="concept-agentic">
+                  <div class="concept-icon-wrapper">
+                    <i data-feather="cpu"></i>
+                  </div>
+                  <div class="concept-details">
+                    <span class="concept-title">Agentic AI & Swarm Cooperation</span>
+                    <span class="concept-description">Visualizes how 7 specialized AI agents cooperate concurrently to analyze, audit, and patch vulnerability flows.</span>
+                  </div>
+                </div>
+                
+                <div class="concept-card" id="concept-llm">
+                  <div class="concept-icon-wrapper">
+                    <i data-feather="zap"></i>
+                  </div>
+                  <div class="concept-details">
+                    <span class="concept-title">Real-World LLM Cascading</span>
+                    <span class="concept-description">Showcases failover architecture running OpenAI/Gemini/Ollama sequentially to triage and fix issues automatically.</span>
+                  </div>
+                </div>
+                
+                <div class="concept-card" id="concept-design">
+                  <div class="concept-icon-wrapper">
+                    <i data-feather="git-merge"></i>
+                  </div>
+                  <div class="concept-details">
+                    <span class="concept-title">System Integration & Async Pipes</span>
+                    <span class="concept-description">Demonstrates FastAPI background task scheduling, status state machines, and real-time frontend updates.</span>
+                  </div>
+                </div>
+                
+                <div class="concept-card" id="concept-responsible">
+                  <div class="concept-icon-wrapper">
+                    <i data-feather="check-square"></i>
+                  </div>
+                  <div class="concept-details">
+                    <span class="concept-title">Responsible AI & CWE Governance</span>
+                    <span class="concept-description">Ensures security reporting is mapped to standardized CWE hierarchies with human-in-the-loop patch approvals.</span>
+                  </div>
+                </div>
+                
+                <div class="concept-card" id="concept-security">
+                  <div class="concept-icon-wrapper">
+                    <i data-feather="shield"></i>
+                  </div>
+                  <div class="concept-details">
+                    <span class="concept-title">Vulnerability Remediation & Safety</span>
+                    <span class="concept-description">Applies AST parsing constraints to block LLM code hallucinations, maintaining strict source code isolation.</span>
+                  </div>
+                </div>
+                
+              </div>
             </div>
-            <div class="console-log" id="console-log">
-              <!-- Logs populated dynamically -->
-            </div>
+            
           </div>
         </section>
 
