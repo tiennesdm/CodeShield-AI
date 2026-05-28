@@ -1,16 +1,25 @@
 """
 CodeShield AI - Multi-Agent Swarm Package.
 
-Provides 9 specialized agents:
-  - john_sast: Static Application Security Testing
-  - dave_dast: Dynamic Application Security Testing
-  - sam_secrets: Secret Detection
-  - pam_sca: Software Composition Analysis
-  - tina_taint: Taint Analysis
-  - sade_llm: LLM Security & Container Scanning
-  - test_parser: Code Parser & Test Target Extractor
-  - test_generator: Intelligent Test Case Generator
-  - pr_agent: GitHub Pull Request Automation
+Provides 14 specialized agents:
+  Security Scanning:
+    - john_sast: Static Application Security Testing
+    - dave_dast: Dynamic Application Security Testing
+    - sam_secrets: Secret Detection
+    - pam_sca: Software Composition Analysis
+    - tina_taint: Taint Analysis
+    - sade_llm: LLM Security & Container Scanning
+  Test Generation:
+    - test_parser: Code Parser & Test Target Extractor
+    - test_generator: Intelligent Test Case Generator
+    - test_generator_ai: LLM-Enhanced Test Case Generator
+    - pr_agent: GitHub Pull Request Automation
+  Self-Improving:
+    - test_runner: Test Execution & Coverage Reporter
+    - coverage_analyzer: Coverage Gap Identifier
+    - mutation_tester: Weak Test Detector via Mutation Testing
+    - test_improver: Test Case Improver & Gap Filler
+    - feedback_loop: Self-Improving Test Orchestrator
 
 Plus the base infrastructure:
   - BaseSecurityAgent: Abstract base for all agents
