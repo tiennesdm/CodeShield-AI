@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     data_dir: Path = Field(default=Path("./data"))
     temp_dir: Path = Field(default=Path("./tmp"))
     max_upload_size_mb: int = 100
+    # Datastore backend: "json" (file-per-scan) or "sqlite" (single DB file)
+    db_backend: str = "json"
+    db_path: Optional[str] = None  # defaults to <data_dir>/codeshield.db for sqlite
 
     # Scanning
     default_scan_timeout: int = 600  # seconds
@@ -58,6 +61,14 @@ class Settings(BaseSettings):
     pmd_path: Optional[str] = None
     gitleaks_path: Optional[str] = None
     dependency_check_path: Optional[str] = None
+
+    # Security (opt-in; disabled by default)
+    require_api_key: bool = False
+    api_keys: str = ""  # comma-separated allow-list, e.g. "k1,k2"
+    rate_limit_per_minute: int = 0  # 0 = disabled
+
+    # Background jobs
+    job_concurrency: int = 2
 
     # Logging
     log_level: str = "INFO"

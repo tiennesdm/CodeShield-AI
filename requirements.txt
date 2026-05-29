@@ -21,8 +21,8 @@ jinja2>=3.1.0
 # Integrations (used by integrations/github_client.py and lsp_server.py)
 aiohttp>=3.9.0
 lsprotocol>=2023.0.0
-# pygls 2.x moved LanguageServer out of pygls.server; pin to the 1.x API.
-pygls>=1.0.0,<2.0.0
+# lsp_server.py uses the pygls 2.x API (pygls.lsp.server).
+pygls>=2.0.0
 
 # Agentic AI / LLM providers
 # The LLM provider layer (llm/) talks to the Anthropic & OpenAI HTTP APIs via
