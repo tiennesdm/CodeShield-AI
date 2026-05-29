@@ -84,6 +84,13 @@ trail before delegating to a swappable **LLM provider**.
 
 ---
 
+## 2a. How the files connect (and what each part teaches)
+
+![File connections and learning goals](images/file-connections.png)
+
+Arrows are imports / call & data flow; each box is colored by the learning goal
+it maps to (legend on the right of the image).
+
 ## 3. Directory map
 
 | Path | Responsibility |
