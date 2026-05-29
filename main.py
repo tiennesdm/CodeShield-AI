@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -666,6 +666,28 @@ async def get_scan_status(scan_id: str) -> Dict[str, Any]:
     }
 
 
+@app.websocket("/api/ws/scan/{scan_id}")
+async def websocket_endpoint(websocket: WebSocket, scan_id: str):
+    from fastapi import WebSocket, WebSocketDisconnect
+    from utils.ws_manager import ws_manager
+    try:
+        _validate_scan_id(scan_id)
+    except Exception:
+        await websocket.close(code=4000)
+        return
+
+    await ws_manager.connect(scan_id, websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            logger.debug("Received WebSocket message from client on scan %s: %s", scan_id, data)
+    except WebSocketDisconnect:
+        ws_manager.disconnect(scan_id, websocket)
+    except Exception as e:
+        logger.error("WebSocket error for scan %s: %s", scan_id, e)
+        ws_manager.disconnect(scan_id, websocket)
+
+
 @app.get("/api/scan/{scan_id}/results")
 async def get_scan_results(
     scan_id: str,
@@ -765,7 +787,7 @@ async def get_pdf_report(scan_id: str) -> StreamingResponse:
 
 
 @app.get("/api/scan/{scan_id}/download")
-async def download_patched_code(scan_id: str) -> StreamingResponse:
+async def download_patched_code(scan_id: str):
     """
     Apply auto-fixes to all vulnerabilities and download the patched code as a ZIP file.
 
@@ -779,6 +801,7 @@ async def download_patched_code(scan_id: str) -> StreamingResponse:
     import shutil
     import zipfile
     from pathlib import Path
+    from fastapi.responses import FileResponse
     from scanner.zip_handler import ZipHandler
 
     _validate_scan_id(scan_id)
@@ -788,6 +811,18 @@ async def download_patched_code(scan_id: str) -> StreamingResponse:
 
     if scan.status not in ("completed", "failed"):
         raise HTTPException(status_code=400, detail="Scan is not yet complete")
+
+    filename = f"patched_{scan.name.replace('/', '_').replace(' ', '_')}_{scan_id}.zip"
+    cached_zip_path = settings.temp_dir / f"patched_cache_{scan_id}.zip"
+
+    # Check cache first
+    if cached_zip_path.exists():
+        logger.info("Serving cached patched ZIP for scan %s", scan_id)
+        return FileResponse(
+            path=str(cached_zip_path),
+            media_type="application/zip",
+            filename=filename
+        )
 
     source_dir_to_use = None
     temp_dir = None
@@ -857,9 +892,15 @@ async def download_patched_code(scan_id: str) -> StreamingResponse:
                     arcname = os.path.relpath(file_path, source_dir_to_use)
                     zf.write(file_path, arcname)
 
+        # Write to cache file
+        try:
+            with open(cached_zip_path, "wb") as f:
+                f.write(memory_file.getvalue())
+            logger.info("Cached patched ZIP for scan %s to %s", scan_id, cached_zip_path)
+        except Exception as e:
+            logger.warning("Failed to cache patched ZIP for scan %s: %s", scan_id, e)
+
         memory_file.seek(0)
-        
-        filename = f"patched_{scan.name.replace('/', '_').replace(' ', '_')}_{scan_id}.zip"
         return StreamingResponse(
             memory_file,
             media_type="application/zip",

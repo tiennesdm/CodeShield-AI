@@ -509,6 +509,49 @@ class AutoFixEngine:
                 return response.choices[0].message.content
             except Exception as e:
                 logger.debug("Legacy OpenAI auto-fix failed: %s", e)
+
+        # Fallback to local Ollama if running
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                ollama_url = "http://localhost:11434/api/chat"
+                model = "qwen2.5-coder"
+                try:
+                    tags_resp = await client.get("http://localhost:11434/api/tags")
+                    if tags_resp.status_code == 200:
+                        models = [m.get("name") for m in tags_resp.json().get("models", [])]
+                        if models:
+                            coder_models = [m for m in models if "coder" in m or "code" in m]
+                            if coder_models:
+                                model = coder_models[0]
+                            else:
+                                model = models[0]
+                except Exception:
+                    pass
+
+                response = await client.post(
+                    ollama_url,
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.2
+                        }
+                    }
+                )
+                if response.status_code == 200:
+                    res_json = response.json()
+                    content = res_json.get("message", {}).get("content")
+                    if content:
+                        logger.info("Generated auto-fix using local Ollama model: %s", model)
+                        return content
+        except Exception as e:
+            logger.debug("Local Ollama auto-fix fallback failed: %s", e)
+
         return None
 
     async def _llm_generate_fix(
