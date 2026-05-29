@@ -322,7 +322,7 @@ stages:
         done
 
         if [ $ELAPSED -ge $TIMEOUT ]; then
-            echo "##vso[task.logissue type=error]Scan timed out after ${TIMEOUT}s"
+            echo "##vso[task.logissue type=error]Scan timed out after ${{TIMEOUT}}s"
             exit 1
         fi
 

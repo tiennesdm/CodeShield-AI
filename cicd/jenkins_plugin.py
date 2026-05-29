@@ -89,6 +89,12 @@ class JenkinsPluginGenerator:
             "        always {",
             post_block,
             "        }",
+            "        success {",
+            "            echo \"\\u001B[32m[CodeShield] GREEN: security scan passed the quality gate\\u001B[0m\"",
+            "        }",
+            "        failure {",
+            "            echo \"\\u001B[31m[CodeShield] RED: security scan failed the quality gate\\u001B[0m\"",
+            "        }",
             "    }",
             "}",
         ])
