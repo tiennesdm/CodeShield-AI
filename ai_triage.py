@@ -344,7 +344,7 @@ class AITriageEngine:
             tp_score += 1
 
         # Use LLM for borderline cases or complex analysis
-        if use_llm and self._openai_client and fp_score < 2 and tp_score < 2:
+        if use_llm and fp_score < 2 and tp_score < 2:
             try:
                 llm_result = await self._llm_triage(vuln, code_context)
                 if llm_result:
@@ -534,6 +534,46 @@ class AITriageEngine:
         new_idx = max(0, min(len(levels) - 1, idx + adjustment))
         return levels[new_idx]
 
+    async def _llm_complete(
+        self, prompt: str, system: str, max_tokens: int = 200
+    ) -> Optional[str]:
+        """
+        Get an LLM completion, preferring the governed LLM layer (any provider,
+        with PII redaction + audit) and falling back to the legacy OpenAI
+        client. Returns None if no LLM backend is available.
+        """
+        try:
+            from governance.assist import governed_complete
+            from governance.policy import DataSensitivity
+
+            governed = await governed_complete(
+                prompt,
+                system=system,
+                sensitivity=DataSensitivity.CONFIDENTIAL,
+                actor="ai_triage",
+                max_tokens=max_tokens,
+            )
+            if governed is not None:
+                return governed.content
+        except Exception as e:  # pragma: no cover - defensive
+            logger.debug("Governed triage path unavailable: %s", e)
+
+        if self._openai_client:
+            try:
+                response = await self._openai_client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.1,
+                    max_tokens=max_tokens,
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                logger.debug("Legacy OpenAI triage failed: %s", e)
+        return None
+
     async def _llm_triage(
         self,
         vuln: Vulnerability,
@@ -549,31 +589,16 @@ class AITriageEngine:
         Returns:
             Triage result dict or None if LLM unavailable
         """
-        if not self._openai_client:
-            return None
-
         prompt = self._build_triage_prompt(vuln, code_context)
+        system = (
+            "You are a security code review expert. Analyze the given "
+            "vulnerability finding and determine if it is a true positive "
+            "or false positive. Respond with ONLY a JSON object: "
+            '{"verdict": "true_positive|false_positive|uncertain", "reason": "..."}'
+        )
 
         try:
-            response = await self._openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a security code review expert. Analyze the given "
-                            "vulnerability finding and determine if it is a true positive "
-                            "or false positive. Respond with ONLY a JSON object: "
-                            '{"verdict": "true_positive|false_positive|uncertain", "reason": "..."}'
-                        ),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.1,
-                max_tokens=200,
-            )
-
-            content = response.choices[0].message.content
+            content = await self._llm_complete(prompt, system, max_tokens=200)
             if not content:
                 return None
 

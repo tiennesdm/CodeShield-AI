@@ -18,6 +18,7 @@ enforced in code rather than living only in a policy document:
     :class:`llm.base.LLMProvider` and applies all of the above.
 """
 
+from governance.assist import governed_backend_available, governed_complete
 from governance.audit import AuditTrail, get_audit_trail
 from governance.bias import BiasFinding, BiasScanner
 from governance.governor import AIGovernor, GovernedResponse, GovernanceError
@@ -39,4 +40,6 @@ __all__ = [
     "BiasFinding",
     "AuditTrail",
     "get_audit_trail",
+    "governed_complete",
+    "governed_backend_available",
 ]

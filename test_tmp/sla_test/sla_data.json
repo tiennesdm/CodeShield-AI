@@ -1,14 +1,14 @@
 {
   "records": {
     "v-f1": {
-      "id": "b43ec1ab-1068-4689-8a04-b1667c7f8895",
+      "id": "8727661c-a115-4b13-bbf2-78f761af8900",
       "vulnerability_id": "v-f1",
       "scan_id": "s1",
       "severity": "CRITICAL",
       "title": null,
       "category": null,
-      "detected_at": "2026-05-25 19:39:09.267870+00:00",
-      "sla_deadline": "2026-05-28 19:39:09.267870+00:00",
+      "detected_at": "2026-05-29 07:19:26.707830+00:00",
+      "sla_deadline": "2026-06-01 07:19:26.707830+00:00",
       "assigned_to": null,
       "assigned_at": null,
       "remediated_at": null,
@@ -18,7 +18,7 @@
       "events": [
         {
           "event_type": "detected",
-          "timestamp": "2026-05-25 19:39:09.267870+00:00",
+          "timestamp": "2026-05-29 07:19:26.707830+00:00",
           "actor_id": null,
           "notes": "Vulnerability detected with severity CRITICAL"
         }
@@ -32,14 +32,14 @@
       "metadata": {}
     },
     "v-f2": {
-      "id": "cd3a7e75-324b-4a84-a55b-b0503b279629",
+      "id": "b9063f6e-d864-4fe2-8434-53fcd0c9c453",
       "vulnerability_id": "v-f2",
       "scan_id": "s2",
       "severity": "HIGH",
       "title": null,
       "category": null,
-      "detected_at": "2026-05-25 19:39:09.268304+00:00",
-      "sla_deadline": "2026-06-09 19:39:09.268304+00:00",
+      "detected_at": "2026-05-29 07:19:26.708020+00:00",
+      "sla_deadline": "2026-06-13 07:19:26.708020+00:00",
       "assigned_to": null,
       "assigned_at": null,
       "remediated_at": null,
@@ -49,7 +49,7 @@
       "events": [
         {
           "event_type": "detected",
-          "timestamp": "2026-05-25 19:39:09.268304+00:00",
+          "timestamp": "2026-05-29 07:19:26.708020+00:00",
           "actor_id": null,
           "notes": "Vulnerability detected with severity HIGH"
         }

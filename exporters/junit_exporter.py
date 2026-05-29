@@ -9,7 +9,7 @@ encoded in the type attribute and full details in <failure> or <skipped> tags.
 """
 
 import html
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 from xml.etree.ElementTree import Element, SubElement, tostring
 
@@ -67,7 +67,7 @@ class JUnitExporter:
                 "errors": "0",
                 "skipped": str(self._count_skipped(scan_result)),
                 "time": str(scan_result.scan_duration or 0),
-                "timestamp": (scan_result.start_time or datetime.utcnow()).isoformat(),
+                "timestamp": (scan_result.start_time or datetime.now(timezone.utc)).isoformat(),
                 "id": scan_result.scan_id,
             },
         )
