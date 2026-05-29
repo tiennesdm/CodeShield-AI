@@ -58,7 +58,7 @@ from lsprotocol.types import (
     TextEdit,
     WorkspaceEdit,
 )
-from pygls.server import LanguageServer
+from pygls.lsp.server import LanguageServer
 from pygls.protocol import JsonRPCNotification, JsonRPCRequestMessage
 
 # Configure logging
