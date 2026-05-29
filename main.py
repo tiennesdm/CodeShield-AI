@@ -22,10 +22,11 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from database.json_db import JSONDatabase
+from database import get_database
 from models.vulnerability import (
     ScanComparison,
     ScanConfig,
@@ -131,8 +132,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Optional rate limiting (no-op unless RATE_LIMIT_PER_MINUTE > 0)
+try:
+    from auth.api_key import RateLimitMiddleware
+
+    app.add_middleware(RateLimitMiddleware)
+except Exception as _rl_exc:  # pragma: no cover - defensive
+    import logging as _logging
+
+    _logging.getLogger(__name__).warning("Rate limiter not mounted: %s", _rl_exc)
+
 # Serve static files and main dashboard route
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 @app.get("/")
 async def read_index():
@@ -140,7 +152,7 @@ async def read_index():
     return FileResponse("static/index.html")
 
 # Initialize components
-db = JSONDatabase()
+db = get_database()
 scan_engine = ScanEngine()
 zip_handler = ZipHandler()
 github_handler = GitHubHandler()
@@ -202,6 +214,19 @@ notification_engine = get_notification_engine()
 # =============================================================================
 # Health & Info Endpoints
 # =============================================================================
+
+@app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
+async def dashboard_page() -> HTMLResponse:
+    """Server-rendered scan history & stats dashboard."""
+    try:
+        from exporters.dashboard import DashboardRenderer
+        stats = await db.get_stats()
+        scans = await db.list_scans(limit=50)
+        return HTMLResponse(DashboardRenderer().render(stats, scans))
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error("Dashboard render failed: %s", e)
+        return HTMLResponse("<h1>Dashboard unavailable</h1>", status_code=500)
+
 
 @app.get("/api/health")
 async def health_check() -> Dict[str, Any]:
