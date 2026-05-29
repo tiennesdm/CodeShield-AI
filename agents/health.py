@@ -161,13 +161,21 @@ class AgentHealthMonitor:
 
     async def register_agent(self, agent_id: str, agent_name: str) -> None:
         """Register an agent for health monitoring."""
+        newly_registered = False
         async with self._lock:
             if agent_id not in self._metrics:
                 self._metrics[agent_id] = AgentMetrics(
                     agent_id=agent_id,
                     agent_name=agent_name,
+                    last_heartbeat=time.time(),
                 )
                 self._health_status[agent_id] = HealthStatus.HEALTHY
+                newly_registered = True
+        if newly_registered:
+            # Surface the UNKNOWN -> HEALTHY transition to listeners.
+            await self._notify_status_change(
+                agent_id, HealthStatus.UNKNOWN, HealthStatus.HEALTHY
+            )
         logger.debug("Agent %s registered for health monitoring", agent_id)
 
     async def unregister_agent(self, agent_id: str) -> None:
@@ -331,12 +339,21 @@ class AgentHealthMonitor:
         while self._running:
             try:
                 await self._check_all_agents()
-                await asyncio.sleep(self._check_interval)
+                # Sleep in small slices so runtime changes to _check_interval
+                # (e.g. in tests) take effect promptly instead of being stuck
+                # in one long sleep.
+                slept = 0.0
+                while self._running and slept < self._check_interval:
+                    step = min(0.05, max(0.0, self._check_interval - slept))
+                    if step <= 0:
+                        break
+                    await asyncio.sleep(step)
+                    slept += step
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error("Monitor loop error: %s", e)
-                await asyncio.sleep(self._check_interval)
+                await asyncio.sleep(min(self._check_interval, 0.5))
 
     async def _check_all_agents(self) -> None:
         """Check health of all monitored agents."""
