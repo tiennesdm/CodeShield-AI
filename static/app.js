@@ -431,7 +431,14 @@ function startPolling(scanId) {
           if (progress < 10) phase = 'Cloning / Extracting codebase...';
           else if (progress < 30) phase = 'Detecting programming languages...';
           else if (progress < 80) phase = 'Running security analyzers...';
-          else if (progress < 95) phase = 'Deduplicating vulnerability findings...';
+          else if (progress < 95) {
+            if (progress < 82) phase = 'Triage: Deduplicating hash-based findings...';
+            else if (progress < 84) phase = 'Triage: Performing semantic similarity checks...';
+            else if (progress < 86) phase = 'Triage: Resolving cross-agent alerts...';
+            else if (progress < 88) phase = 'Triage: Computing confidence scores...';
+            else if (progress < 90) phase = 'Triage: Running AI Triage on HIGH/CRITICAL findings...';
+            else phase = 'Triage: Adjusting severity thresholds...';
+          }
           else if (progress === 100) phase = 'Completed';
           
           if (status === 'failed') {
@@ -492,7 +499,14 @@ function startHttpPolling(scanId) {
         if (progress < 10) phase = 'Cloning / Extracting codebase...';
         else if (progress < 30) phase = 'Detecting programming languages...';
         else if (progress < 80) phase = 'Running security analyzers...';
-        else if (progress < 95) phase = 'Deduplicating vulnerability findings...';
+        else if (progress < 95) {
+          if (progress < 82) phase = 'Triage: Deduplicating hash-based findings...';
+          else if (progress < 84) phase = 'Triage: Performing semantic similarity checks...';
+          else if (progress < 86) phase = 'Triage: Resolving cross-agent alerts...';
+          else if (progress < 88) phase = 'Triage: Computing confidence scores...';
+          else if (progress < 90) phase = 'Triage: Running AI Triage on HIGH/CRITICAL findings...';
+          else phase = 'Triage: Adjusting severity thresholds...';
+        }
         else if (progress === 100) phase = 'Completed';
         
         if (status === 'failed') {
@@ -660,7 +674,23 @@ function renderAgentSwarm(percent, scanStatus) {
       activityText = agent.activities.pending;
     } else if (agentStatus === 'running') {
       statusBadgeHtml = `<span class="agent-status-badge"><i data-feather="loader" class="agent-spinner"></i> Active</span>`;
-      activityText = agent.activities.running;
+      if (agent.id === 'triager') {
+        if (percent < 82) {
+          activityText = 'Deduplicating hash-based findings...';
+        } else if (percent < 84) {
+          activityText = 'Performing semantic similarity checks...';
+        } else if (percent < 86) {
+          activityText = 'Resolving cross-agent alerts...';
+        } else if (percent < 88) {
+          activityText = 'Computing confidence scores...';
+        } else if (percent < 90) {
+          activityText = 'Running AI Triage on HIGH/CRITICAL findings...';
+        } else {
+          activityText = 'Adjusting severity thresholds...';
+        }
+      } else {
+        activityText = agent.activities.running;
+      }
     } else if (agentStatus === 'completed') {
       statusBadgeHtml = `<span class="agent-status-badge"><i data-feather="check-circle"></i> Done</span>`;
       activityText = agent.activities.completed;
