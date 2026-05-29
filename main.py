@@ -538,6 +538,7 @@ async def scan_github(request: ScanRequest) -> Dict[str, Any]:
         name=scan_name,
         source_type="github",
         source_path=source_path,
+        source_url=request.source_url,
         status="running",
         progress=0,
     )
@@ -760,34 +761,50 @@ async def download_patched_code(scan_id: str) -> StreamingResponse:
     if scan.status not in ("completed", "failed"):
         raise HTTPException(status_code=400, detail="Scan is not yet complete")
 
-    # Locate the original ZIP file
-    zip_path = settings.temp_dir / f"extract_{scan_id}" / f"upload_{scan_id}.zip"
     source_dir_to_use = None
     temp_dir = None
     intermediate_dir = None
 
-    if not zip_path.exists():
-        # Fallback to check if the extracted dir exists (in case it wasn't cleaned up)
-        extracted_dir = settings.temp_dir / f"zip_{scan_id}"
-        if not extracted_dir.exists():
+    if scan.source_type == "github":
+        if not scan.source_url:
             raise HTTPException(
                 status_code=400,
-                detail="Original ZIP file or scanned source directory not found on server"
+                detail="GitHub URL is not available in the scan details"
             )
-        source_dir_to_use = extracted_dir
-    else:
-        # Re-extract the ZIP to a clean temporary directory for patching
-        temp_dir = settings.temp_dir / f"patched_download_{scan_id}"
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        from scanner.github_handler import GitHubHandler
+        gh = GitHubHandler()
         try:
-            zh = ZipHandler()
-            source_dir_to_use_str, _, _ = zh.process_upload(str(zip_path), f"patched_download_{scan_id}")
+            source_dir_to_use_str = await gh.clone_repository(scan.source_url, f"patched_download_{scan_id}")
             source_dir_to_use = Path(source_dir_to_use_str)
-            intermediate_dir = settings.temp_dir / f"zip_patched_download_{scan_id}"
+            temp_dir = source_dir_to_use
         except Exception as e:
-            logger.error("Failed to re-extract ZIP for scan %s: %s", scan_id, e)
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            raise HTTPException(status_code=500, detail=f"Failed to process source ZIP: {str(e)}")
+            logger.error("Failed to re-clone repository for scan %s: %s", scan_id, e)
+            raise HTTPException(status_code=500, detail=f"Failed to clone GitHub repository: {str(e)}")
+    else:
+        # Locate the original ZIP file
+        zip_path = settings.temp_dir / f"extract_{scan_id}" / f"upload_{scan_id}.zip"
+        if not zip_path.exists():
+            # Fallback to check if the extracted dir exists (in case it wasn't cleaned up)
+            extracted_dir = settings.temp_dir / f"zip_{scan_id}"
+            if not extracted_dir.exists():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Original ZIP file or scanned source directory not found on server"
+                )
+            source_dir_to_use = extracted_dir
+        else:
+            # Re-extract the ZIP to a clean temporary directory for patching
+            temp_dir = settings.temp_dir / f"patched_download_{scan_id}"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                zh = ZipHandler()
+                source_dir_to_use_str, _, _ = zh.process_upload(str(zip_path), f"patched_download_{scan_id}")
+                source_dir_to_use = Path(source_dir_to_use_str)
+                intermediate_dir = settings.temp_dir / f"zip_patched_download_{scan_id}"
+            except Exception as e:
+                logger.error("Failed to re-extract ZIP for scan %s: %s", scan_id, e)
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                raise HTTPException(status_code=500, detail=f"Failed to process source ZIP: {str(e)}")
 
     # Apply fixes to the extracted files in the temp directory
     try:
