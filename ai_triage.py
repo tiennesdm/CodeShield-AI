@@ -217,6 +217,7 @@ class AITriageEngine:
         vulnerabilities: List[Vulnerability],
         source_path: Optional[str] = None,
         use_llm: bool = True,
+        emit_ws_logs: bool = True,
     ) -> List[Vulnerability]:
         """
         Run AI triage on a list of vulnerabilities.
@@ -228,6 +229,7 @@ class AITriageEngine:
             vulnerabilities: List of vulnerabilities to triage
             source_path: Path to the scanned source code
             use_llm: Whether to use LLM for complex triage (if available)
+            emit_ws_logs: Whether to emit real-time logs to the websocket
 
         Returns:
             Updated vulnerability list with adjusted confidence and FP flags
@@ -257,6 +259,25 @@ class AITriageEngine:
                 triaged.append(vuln)
                 continue
 
+            # Emit websocket log before triaging this file/vulnerability
+            if emit_ws_logs and vuln.scan_id:
+                try:
+                    from utils.ws_manager import ws_manager
+                    import asyncio
+                    file_name = os.path.basename(vuln.file_path)
+                    asyncio.create_task(
+                        ws_manager.broadcast_to_scan(
+                            vuln.scan_id,
+                            {
+                                "type": "log",
+                                "message": f"Triaging vulnerability in {file_name} at line {vuln.line_number}...",
+                                "level": "info"
+                            }
+                        )
+                    )
+                except Exception:
+                    pass
+
             # Run context-aware analysis
             try:
                 result = await self._analyze_vulnerability(vuln, source_path, use_llm)
@@ -274,6 +295,26 @@ class AITriageEngine:
 
             except Exception as e:
                 logger.debug("Triage analysis failed for %s: %s", vuln.id, e)
+
+            # Emit websocket log after triaging this file/vulnerability
+            if emit_ws_logs and vuln.scan_id:
+                try:
+                    from utils.ws_manager import ws_manager
+                    import asyncio
+                    file_name = os.path.basename(vuln.file_path)
+                    status_text = "LIKELY FALSE POSITIVE" if "LIKELY FALSE POSITIVE" in vuln.description else "CONFIRMED"
+                    asyncio.create_task(
+                        ws_manager.broadcast_to_scan(
+                            vuln.scan_id,
+                            {
+                                "type": "log",
+                                "message": f"Completed triage for {file_name} - Status: {status_text}",
+                                "level": "success" if status_text == "CONFIRMED" else "warn"
+                            }
+                        )
+                    )
+                except Exception:
+                    pass
 
             triaged.append(vuln)
 
