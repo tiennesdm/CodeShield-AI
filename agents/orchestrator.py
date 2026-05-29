@@ -30,6 +30,26 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+# Multi-Agent Swarm Component Imports (global fallback to standalone mode)
+try:
+    from agents.bus import AgentCommunicationBus, AgentMessage, MessageType, Priority, get_message_bus
+    from agents.registry import AgentRegistry, AgentCapabilities, AgentStatus, get_registry
+    from agents.health import AgentHealthMonitor, get_health_monitor
+    COMPONENTS_AVAILABLE = True
+except ImportError:
+    COMPONENTS_AVAILABLE = False
+    AgentCommunicationBus = None
+    AgentMessage = None
+    MessageType = None
+    Priority = None
+    get_message_bus = None
+    AgentRegistry = None
+    get_registry = None
+    AgentHealthMonitor = None
+    get_health_monitor = None
+
+
+
 class OrchestratorPhase(str, Enum):
     """Phases of the orchestrator workflow."""
 
@@ -201,17 +221,14 @@ class HALOrchestrator:
         self._lock = asyncio.Lock()
         self._running = False
 
-        # Import components
-        try:
-            from agents.bus import AgentCommunicationBus, AgentMessage, MessageType, Priority, get_message_bus
-            from agents.registry import AgentRegistry, AgentCapabilities, AgentStatus, get_registry
-            from agents.health import AgentHealthMonitor, get_health_monitor
+        # Initialize multi-agent orchestration components
+        if COMPONENTS_AVAILABLE:
             self._bus = get_message_bus()
             self._registry = get_registry()
             self._health_monitor = get_health_monitor()
             self._components_available = True
-        except ImportError as e:
-            logger.warning("Agent components not available: %s. Running in standalone mode.", e)
+        else:
+            logger.warning("Agent components not available. Running in standalone mode.")
             self._bus = None
             self._registry = None
             self._health_monitor = None
@@ -406,7 +423,6 @@ class HALOrchestrator:
 
             # Publish finding messages to bus
             if self._bus:
-                from agents.bus import AgentMessage, MessageType, Priority
                 for finding in findings:
                     msg = AgentMessage(
                         agent_id=agent_id,
@@ -574,7 +590,6 @@ class HALOrchestrator:
 
     def _finding_to_priority(self, finding: Dict[str, Any]) -> Any:
         """Convert finding severity to message priority."""
-        from agents.bus import Priority
         severity = finding.get("severity", "MEDIUM")
         severity_map = {
             "CRITICAL": Priority.CRITICAL,

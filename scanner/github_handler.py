@@ -20,14 +20,14 @@ logger = get_logger(__name__)
 
 class GitHubHandler:
     """
-    Handles cloning and validation of GitHub repositories.
+    Handles cloning and validation of Git repositories (GitHub, GitLab, Bitbucket).
 
     Supports HTTPS URLs and extracts repository metadata.
     """
 
-    # Regex for validating GitHub URLs
-    GITHUB_URL_PATTERN = re.compile(
-        r"^https://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+(/.*)?$"
+    # Regex for validating Git URLs (GitHub, GitLab, Bitbucket)
+    GIT_URL_PATTERN = re.compile(
+        r"^https://(github\.com|gitlab\.com|bitbucket\.org)/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+(/.*)?$"
     )
 
     def __init__(self) -> None:
@@ -36,10 +36,10 @@ class GitHubHandler:
 
     def validate_url(self, url: str) -> Tuple[bool, str]:
         """
-        Validate a GitHub URL format.
+        Validate a Git URL format.
 
         Args:
-            url: The GitHub URL to validate
+            url: The Git URL to validate
 
         Returns:
             Tuple of (is_valid, error_message)
@@ -47,30 +47,31 @@ class GitHubHandler:
         if not url:
             return False, "URL is empty"
 
-        if not url.startswith("https://github.com/"):
-            return False, "URL must start with https://github.com/"
+        valid_prefixes = ["https://github.com/", "https://gitlab.com/", "https://bitbucket.org/"]
+        if not any(url.startswith(prefix) for prefix in valid_prefixes):
+            return False, "URL must start with https://github.com/, https://gitlab.com/, or https://bitbucket.org/"
 
         # Use proper URL parsing to prevent URL injection attacks
         try:
             parsed = urlparse(url)
-            if parsed.scheme != "https" or parsed.hostname != "github.com":
-                return False, "Invalid GitHub repository URL format"
+            if parsed.scheme != "https" or parsed.hostname not in ["github.com", "gitlab.com", "bitbucket.org"]:
+                return False, "Invalid Git repository URL format"
             if not parsed.path or parsed.path.count("/") < 2:
-                return False, "Invalid GitHub repository path"
+                return False, "Invalid Git repository path"
         except Exception:
             return False, "Invalid URL format"
 
-        if not self.GITHUB_URL_PATTERN.match(url):
-            return False, "Invalid GitHub repository URL format"
+        if not self.GIT_URL_PATTERN.match(url):
+            return False, "Invalid Git repository URL format"
 
         return True, ""
 
     def extract_repo_info(self, url: str) -> Tuple[str, str]:
         """
-        Extract owner and repo name from GitHub URL.
+        Extract owner and repo name from Git URL.
 
         Args:
-            url: GitHub repository URL
+            url: Git repository URL
 
         Returns:
             Tuple of (owner, repo_name)
@@ -79,19 +80,20 @@ class GitHubHandler:
         url = url.rstrip("/").replace(".git", "")
         parts = url.split("/")
 
-        # URL format: https://github.com/{owner}/{repo}
+        # URL format: https://domain.com/{owner}/{repo}
         if len(parts) >= 5:
             return parts[3], parts[4]
 
         return "unknown", "unknown"
 
-    async def clone_repository(self, url: str, scan_id: str) -> str:
+    async def clone_repository(self, url: str, scan_id: str, branch: Optional[str] = None) -> str:
         """
-        Clone a GitHub repository.
+        Clone a Git repository.
 
         Args:
-            url: GitHub repository URL
+            url: Git repository URL
             scan_id: Scan identifier for directory naming
+            branch: Optional branch name to clone
 
         Returns:
             Path to the cloned repository
@@ -103,7 +105,7 @@ class GitHubHandler:
         # Validate URL
         is_valid, error = self.validate_url(url)
         if not is_valid:
-            raise ValueError(f"Invalid GitHub URL: {error}")
+            raise ValueError(f"Invalid Git URL: {error}")
 
         # Create clone directory
         owner, repo = self.extract_repo_info(url)
@@ -115,19 +117,19 @@ class GitHubHandler:
         if clone_dir.exists():
             shutil.rmtree(clone_dir, ignore_errors=True)
 
-        logger.info("Cloning %s/%s to %s", owner, safe_repo, clone_dir)
+        logger.info("Cloning %s/%s (branch: %s) to %s", owner, safe_repo, branch or "default", clone_dir)
 
         timeout = getattr(self.settings, "github_clone_timeout", 120)
 
         try:
-            # Use subprocess for async cloning
+            # Build git clone command parameters
+            cmd = ["git", "clone", "--depth", "1"]
+            if branch:
+                cmd.extend(["--branch", branch])
+            cmd.extend([url, str(clone_dir)])
+
             process = await asyncio.create_subprocess_exec(
-                "git",
-                "clone",
-                "--depth",
-                "1",
-                url,
-                str(clone_dir),
+                *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -161,13 +163,14 @@ class GitHubHandler:
             shutil.rmtree(clone_dir, ignore_errors=True)
             raise RuntimeError(f"Failed to clone repository: {str(e)}")
 
-    async def clone_with_gitpython(self, url: str, scan_id: str) -> str:
+    async def clone_with_gitpython(self, url: str, scan_id: str, branch: Optional[str] = None) -> str:
         """
         Clone a repository using GitPython (alternative method).
 
         Args:
-            url: GitHub repository URL
+            url: Git repository URL
             scan_id: Scan identifier
+            branch: Optional branch name to clone
 
         Returns:
             Path to the cloned repository
@@ -182,13 +185,18 @@ class GitHubHandler:
             if clone_dir.exists():
                 shutil.rmtree(clone_dir, ignore_errors=True)
 
-            logger.info("Cloning with GitPython: %s", url)
-            git.Repo.clone_from(url, str(clone_dir), depth=1)
+            logger.info("Cloning with GitPython: %s (branch: %s)", url, branch or "default")
+            
+            kwargs = {"depth": 1}
+            if branch:
+                kwargs["branch"] = branch
+                
+            git.Repo.clone_from(url, str(clone_dir), **kwargs)
 
             return str(clone_dir)
 
         except ImportError:
             logger.warning("GitPython not installed, falling back to subprocess")
-            return await self.clone_repository(url, scan_id)
+            return await self.clone_repository(url, scan_id, branch)
         except Exception as e:
             raise RuntimeError(f"GitPython clone failed: {str(e)}")

@@ -485,6 +485,7 @@ async def scan_zip(
         source_path=source_path,
         status="running",
         progress=0,
+        workflow_id=scan_config.workflow_id if scan_config else None,
     )
     await db.save_scan(result)
 
@@ -530,16 +531,16 @@ async def scan_github(request: ScanRequest) -> Dict[str, Any]:
     Returns:
         Scan ID and initial status
     """
-    if request.source_type != SourceType.GITHUB:
-        raise HTTPException(status_code=400, detail="source_type must be 'github'")
+    if request.source_type not in [SourceType.GITHUB, SourceType.GIT]:
+        raise HTTPException(status_code=400, detail="source_type must be 'github' or 'git'")
 
     if not request.source_url:
-        raise HTTPException(status_code=400, detail="GitHub URL is required")
+        raise HTTPException(status_code=400, detail="Git URL is required")
 
-    # Validate GitHub URL
+    # Validate Git URL
     is_valid, error = github_handler.validate_url(request.source_url)
     if not is_valid:
-        raise HTTPException(status_code=400, detail=f"Invalid GitHub URL: {error}")
+        raise HTTPException(status_code=400, detail=f"Invalid Git URL: {error}")
 
     # Generate scan ID
     scan_id = str(uuid.uuid4())[:8]
@@ -547,7 +548,7 @@ async def scan_github(request: ScanRequest) -> Dict[str, Any]:
     # Clone repository
     try:
         source_path = await github_handler.clone_repository(
-            request.source_url, scan_id
+            request.source_url, scan_id, branch=request.branch
         )
     except Exception as e:
         logger.error("Failed to clone repository: %s", e)
@@ -561,11 +562,13 @@ async def scan_github(request: ScanRequest) -> Dict[str, Any]:
     result = ScanResult(
         scan_id=scan_id,
         name=scan_name,
-        source_type="github",
+        source_type=request.source_type.value,
         source_path=source_path,
         source_url=request.source_url,
+        branch=request.branch,
         status="running",
         progress=0,
+        workflow_id=request.config.workflow_id if request.config else None,
     )
     await db.save_scan(result)
 
@@ -613,16 +616,168 @@ async def _run_scan_with_cleanup(
 ) -> None:
     """Run a scan and clean up temp files afterward."""
     try:
-        await scan_engine.run_scan(
-            scan_id=scan_id,
-            source_path=source_path,
-            source_type=source_type,
-            name=name,
-            config=config,
-            db=db,
-            source_url=source_url,
-        )
+        workflow_id = getattr(config, "workflow_id", None) if config else None
+        
+        if workflow_id:
+            logger.info("Routing scan %s to multi-agent workflow: %s", scan_id, workflow_id)
+            
+            # Start orchestrator if not running
+            await hal_orchestrator.start()
+            
+            # Register a dynamic progress callback to update standard database record and websockets
+            async def on_progress(sid: str, progress: int, phase: str):
+                if sid == scan_id:
+                    scan = await db.get_scan(scan_id)
+                    if scan:
+                        scan.progress = progress
+                        scan.phase = phase
+                        if progress >= 100:
+                            scan.status = "completed"
+                        elif phase.lower() == "failed":
+                            scan.status = "failed"
+                        else:
+                            scan.status = "running"
+                        await db.save_scan(scan)
+                        
+                        # Broadcast via WebSockets
+                        from utils.ws_manager import ws_manager
+                        await ws_manager.broadcast_to_scan(
+                            scan_id,
+                            {
+                                "type": "progress",
+                                "scan_id": scan_id,
+                                "progress": progress,
+                                "status": scan.status,
+                                "phase": phase,
+                            },
+                        )
+            
+            hal_orchestrator.add_progress_callback(on_progress)
+            
+            # Prepare scan context
+            context = {
+                "scan_id": scan_id,
+                "source_path": source_path,
+                "name": name,
+                "workflow_id": workflow_id,
+                "base_url": getattr(config, "base_url", None) if hasattr(config, "base_url") else None,
+                "focus_files": getattr(config, "focus_files", []) if hasattr(config, "focus_files") else [],
+                "approval_thresholds": ["CRITICAL"],
+                "config": config.model_dump() if hasattr(config, "model_dump") else {},
+            }
+            
+            try:
+                # Run the multi-agent workflow
+                state = await hal_orchestrator.run_workflow(
+                    scan_id=scan_id,
+                    workflow_id=workflow_id,
+                    source_path=source_path,
+                    context=context,
+                )
+                
+                # Fetch ScanResult record to finalize findings
+                result = await db.get_scan(scan_id)
+                if result:
+                    # Convert triaged findings to Vulnerability objects
+                    from models.vulnerability import Vulnerability
+                    vulns = []
+                    for f in state.triaged_findings:
+                        vulns.append(
+                            Vulnerability(
+                                scan_id=scan_id,
+                                file_path=f.get("file_path", ""),
+                                line_number=f.get("line_number", 0),
+                                severity=f.get("severity", "MEDIUM"),
+                                category=f.get("category", "Unknown"),
+                                title=f.get("title", f.get("category", "Finding")),
+                                description=f.get("description", ""),
+                                code_snippet=f.get("code_snippet"),
+                                fix_suggestion=f.get("fix_suggestion"),
+                                tool_source=f.get("tool_source", "multi_agent"),
+                                cwe_id=f.get("cwe_id"),
+                                confidence=f.get("confidence", "MEDIUM"),
+                            )
+                        )
+                    
+                    result.vulnerabilities = vulns
+                    result.status = "completed" if state.phase.value == "completed" else "failed"
+                    result.progress = 100
+                    result.end_time = datetime.now(timezone.utc)
+                    if result.start_time:
+                        result.scan_duration = int((result.end_time - result.start_time).total_seconds())
+                    result.compute_stats()
+                    result.compute_risk_score()
+                    
+                    # Count files
+                    from utils.helpers import find_files
+                    settings_obj = get_settings()
+                    all_files = find_files(source_path, max_size_mb=getattr(config, "max_file_size_mb", 10))
+                    result.total_files = len(all_files)
+                    
+                    # Detect languages
+                    from scanner.language_detector import LanguageDetector
+                    detector = LanguageDetector()
+                    result.languages = detector.detect_languages(source_path, all_files)
+                    
+                    # Set tools executed
+                    result.tools_used = list(state.agent_results.keys())
+                    
+                    await db.save_scan(result)
+                    
+                    # Broadcast completion via WebSockets
+                    from utils.ws_manager import ws_manager
+                    await ws_manager.broadcast_to_scan(
+                        scan_id,
+                        {
+                            "type": "progress",
+                            "scan_id": scan_id,
+                            "progress": 100,
+                            "status": result.status,
+                            "phase": "completed",
+                        },
+                    )
+            finally:
+                # Remove progress callback to prevent leaks
+                try:
+                    hal_orchestrator._progress_callbacks.remove(on_progress)
+                except Exception:
+                    pass
+        else:
+            # Fallback to standard local SAST scanning
+            await scan_engine.run_scan(
+                scan_id=scan_id,
+                source_path=source_path,
+                source_type=source_type,
+                name=name,
+                config=config,
+                db=db,
+                source_url=source_url,
+            )
     except Exception as e:
+        logger.error("Scan %s failed with exception: %s", scan_id, e, exc_info=True)
+        try:
+            scan = await db.get_scan(scan_id)
+            if scan:
+                scan.status = "failed"
+                scan.error_message = str(e)
+                await db.save_scan(scan)
+                
+                # Broadcast failure via WebSockets
+                from utils.ws_manager import ws_manager
+                await ws_manager.broadcast_to_scan(
+                    scan_id,
+                    {
+                        "type": "progress",
+                        "scan_id": scan_id,
+                        "progress": scan.progress,
+                        "status": "failed",
+                        "phase": "failed",
+                        "error": str(e),
+                    },
+                )
+        except Exception as db_ex:
+            logger.warning("Failed to update scan status in DB for failed scan %s: %s", scan_id, db_ex)
+            
         # Clean up extracted source files on failure
         if source_path and os.path.exists(source_path):
             try:

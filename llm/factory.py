@@ -35,6 +35,10 @@ PROVIDER_REGISTRY: Dict[str, Type[LLMProvider]] = {
 AUTODETECT_ORDER: List[str] = ["claude_cli", "anthropic_api", "openai_api", "mock"]
 
 
+# Cache resolved availability of LLM providers to avoid redundant slow path scans
+_AVAILABILITY_CACHE: Dict[str, bool] = {}
+
+
 def get_llm_provider(
     name: Optional[str] = None,
     *,
@@ -83,7 +87,14 @@ def get_llm_provider(
                 logger.info("Falling back to mock LLM provider")
             return provider
 
-        if provider.is_available_sync():
+        # Use cached availability to avoid redundant slow file system/network checks
+        if candidate in _AVAILABILITY_CACHE:
+            is_available = _AVAILABILITY_CACHE[candidate]
+        else:
+            is_available = provider.is_available_sync()
+            _AVAILABILITY_CACHE[candidate] = is_available
+
+        if is_available:
             logger.info("Using LLM provider: %s", candidate)
             return provider
         logger.debug("Provider '%s' unavailable, trying next", candidate)

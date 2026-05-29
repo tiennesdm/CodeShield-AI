@@ -41,6 +41,8 @@ const docElements = {
   // Results view
   resultsProjectName: document.getElementById('results-project-name'),
   resultsScanId: document.getElementById('results-scan-id'),
+  resultsBranch: document.getElementById('results-branch'),
+  resultsBranchContainer: document.getElementById('results-branch-container'),
   resultsLanguages: document.getElementById('results-languages'),
   resultsTotalFiles: document.getElementById('results-total-files'),
   resultsDuration: document.getElementById('results-duration'),
@@ -81,6 +83,12 @@ document.addEventListener('DOMContentLoaded', () => {
     loadHistory();
   } catch (e) {
     console.error("Load history error:", e);
+  }
+  
+  try {
+    loadWorkflows();
+  } catch (e) {
+    console.error("Load workflows error:", e);
   }
   
   try {
@@ -418,6 +426,7 @@ async function submitZip(event) {
   
   const name = document.getElementById('zip-scan-name').value;
   const tools = getCheckedValues('tools');
+  const workflowId = document.getElementById('zip-workflow').value || null;
   
   const formData = new FormData();
   formData.append('file', file);
@@ -425,6 +434,7 @@ async function submitZip(event) {
   
   const config = {
     tools: tools,
+    workflow_id: workflowId,
     severity_filters: ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
   };
   formData.append('config', JSON.stringify(config));
@@ -470,14 +480,23 @@ async function submitGithub(event) {
   
   const url = document.getElementById('github-url-input').value;
   const name = document.getElementById('github-scan-name').value;
+  const branch = document.getElementById('github-branch') ? document.getElementById('github-branch').value : null;
   const tools = getCheckedValues('github_tools');
+  const workflowId = document.getElementById('github-workflow').value || null;
+  
+  let sourceType = 'github';
+  if (url.includes('gitlab.com') || url.includes('bitbucket.org')) {
+    sourceType = 'git';
+  }
   
   const payload = {
-    source_type: 'github',
+    source_type: sourceType,
     source_url: url,
+    branch: branch || null,
     name: name || null,
     config: {
       tools: tools,
+      workflow_id: workflowId,
       severity_filters: ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
     }
   };
@@ -485,9 +504,9 @@ async function submitGithub(event) {
   try {
     showView('scanning');
     clearLogs();
-    showLog('Connecting to backend to launch GitHub Repository Clone...');
+    showLog('Connecting to backend to launch Git Repository Clone...');
     
-    docElements.scanningProjectName.textContent = name || url.split('/').pop();
+    docElements.scanningProjectName.textContent = name || (url.split('/').pop() + (branch ? ` (${branch})` : ''));
     
     const response = await fetch('/api/scan/github', {
       method: 'POST',
@@ -900,9 +919,20 @@ function updateProgress(percent, phaseText, status) {
 
 // Render Results View
 function renderResultsPage(results) {
+  // Reset tabs to Vulnerability view as default active
+  switchResultsTab('vulns');
+
   // Metadata
   docElements.resultsProjectName.textContent = results.name || `Scan ${results.scan_id}`;
   docElements.resultsScanId.textContent = results.scan_id;
+  
+  if (results.branch) {
+    if (docElements.resultsBranchContainer) docElements.resultsBranchContainer.style.display = 'inline-flex';
+    if (docElements.resultsBranch) docElements.resultsBranch.textContent = results.branch;
+  } else {
+    if (docElements.resultsBranchContainer) docElements.resultsBranchContainer.style.display = 'none';
+  }
+  
   docElements.resultsLanguages.textContent = results.languages ? results.languages.join(', ') : 'None';
   docElements.resultsTotalFiles.textContent = results.total_files || 0;
   docElements.resultsDuration.textContent = results.scan_duration || 0;
@@ -1627,4 +1657,276 @@ async function submitTriageFeedback(vulnId, verdict, event) {
     alert("Connection error: " + err.message);
   }
 }
+
+// =============================================================================
+// Compliance & Workflow Custom Subsystem (Point 1 & Point 4)
+// =============================================================================
+
+async function loadWorkflows() {
+  try {
+    const response = await fetch('/api/agents/workflows');
+    if (response.ok) {
+      const data = await response.json();
+      const workflows = data.workflows || [];
+      
+      const zipSelect = document.getElementById('zip-workflow');
+      const githubSelect = document.getElementById('github-workflow');
+      
+      let html = '<option value="">Standard Scan (Local SAST)</option>';
+      workflows.forEach(w => {
+        const isDefault = w.workflow_id === 'full_scan' ? ' selected' : '';
+        html += `<option value="${w.workflow_id}"${isDefault}>${w.name} (Multi-Agent Swarm)</option>`;
+      });
+      
+      if (zipSelect) zipSelect.innerHTML = html;
+      if (githubSelect) githubSelect.innerHTML = html;
+    }
+  } catch (err) {
+    console.error('Failed to load agent workflows:', err);
+  }
+}
+
+function switchResultsTab(tabName) {
+  const tabVulns = document.getElementById('res-tab-vulns');
+  const tabCompliance = document.getElementById('res-tab-compliance');
+  const contentVulns = document.getElementById('vulns-tab-content');
+  const contentCompliance = document.getElementById('compliance-tab-content');
+  
+  if (!tabVulns || !tabCompliance) return;
+  
+  if (tabName === 'vulns') {
+    tabVulns.classList.add('active');
+    tabVulns.style.color = 'var(--color-text-main)';
+    tabVulns.style.background = 'rgba(255, 255, 255, 0.05)';
+    
+    tabCompliance.classList.remove('active');
+    tabCompliance.style.color = 'var(--color-text-muted)';
+    tabCompliance.style.background = 'none';
+    
+    contentVulns.classList.remove('hidden');
+    contentCompliance.classList.add('hidden');
+  } else {
+    tabCompliance.classList.add('active');
+    tabCompliance.style.color = 'var(--color-text-main)';
+    tabCompliance.style.background = 'rgba(255, 255, 255, 0.05)';
+    
+    tabVulns.classList.remove('active');
+    tabVulns.style.color = 'var(--color-text-muted)';
+    tabVulns.style.background = 'none';
+    
+    contentVulns.classList.add('hidden');
+    contentCompliance.classList.remove('hidden');
+    
+    if (currentState.activeScanData) {
+      loadComplianceReport(currentState.activeScanData);
+    }
+  }
+}
+
+let complianceReports = {};
+
+async function loadComplianceReport(results) {
+  const frameworks = ['soc2_type2', 'iso27001_2022', 'gdpr', 'pci_dss_4'];
+  
+  // Set all status texts to Loading...
+  frameworks.forEach(fwId => {
+    const statusMap = {
+      'soc2_type2': 'fw-status-soc2',
+      'iso27001_2022': 'fw-status-iso',
+      'gdpr': 'fw-status-gdpr',
+      'pci_dss_4': 'fw-status-pci'
+    };
+    const el = document.getElementById(statusMap[fwId]);
+    if (el) el.textContent = 'Loading...';
+  });
+
+  const promises = frameworks.map(async (fwId) => {
+    try {
+      const response = await fetch(`/api/compliance/report/${fwId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ scan_results: [results] })
+      });
+      if (response.ok) {
+        const report = await response.json();
+        complianceReports[fwId] = report;
+        updateFrameworkCard(fwId, report);
+      } else {
+        console.error(`Failed to load compliance report for ${fwId}`);
+      }
+    } catch (err) {
+      console.error(`Error fetching compliance for ${fwId}:`, err);
+    }
+  });
+  
+  await Promise.all(promises);
+  
+  // Select first framework by default after loading
+  selectComplianceFramework('soc2_type2');
+}
+
+function updateFrameworkCard(fwId, report) {
+  const cardIdMap = {
+    'soc2_type2': { card: 'fw-card-soc2', status: 'fw-status-soc2', percent: 'percent-soc2', circle: 'circle-soc2' },
+    'iso27001_2022': { card: 'fw-card-iso', status: 'fw-status-iso', percent: 'percent-iso', circle: 'circle-iso' },
+    'gdpr': { card: 'fw-card-gdpr', status: 'fw-status-gdpr', percent: 'percent-gdpr', circle: 'circle-gdpr' },
+    'pci_dss_4': { card: 'fw-card-pci', status: 'fw-status-pci', percent: 'percent-pci', circle: 'circle-pci' }
+  };
+  
+  const mapping = cardIdMap[fwId];
+  if (!mapping) return;
+  
+  const summary = report.executive_summary || {};
+  const percent = Math.round(summary.overall_compliance_percentage || 0);
+  
+  document.getElementById(mapping.percent).textContent = `${percent}%`;
+  
+  const circleEl = document.getElementById(mapping.circle);
+  if (circleEl) {
+    circleEl.setAttribute('stroke-dasharray', `${percent}, 100`);
+  }
+  
+  const statusEl = document.getElementById(mapping.status);
+  const cardEl = document.getElementById(mapping.card);
+  
+  let statusText = 'Compliant';
+  let badgeStyle = 'background: rgba(16, 185, 129, 0.15); color: #10b981;';
+  
+  if (percent < 50) {
+    statusText = 'Non-Compliant';
+    badgeStyle = 'background: rgba(239, 68, 68, 0.15); color: #ef4444;';
+  } else if (percent < 90) {
+    statusText = 'Action Needed';
+    badgeStyle = 'background: rgba(245, 158, 11, 0.15); color: #f59e0b;';
+  }
+  
+  if (statusEl) {
+    statusEl.textContent = statusText;
+    statusEl.style.cssText = `font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px; width: fit-content; text-transform: uppercase; ${badgeStyle}`;
+  }
+  
+  if (cardEl) {
+    cardEl.style.border = `1px solid ${percent >= 90 ? '#10b981' : percent >= 50 ? '#f59e0b' : '#ef4444'}`;
+    cardEl.style.boxShadow = `0 4px 12px ${percent >= 90 ? 'rgba(16,185,129,0.08)' : percent >= 50 ? 'rgba(245,158,11,0.08)' : 'rgba(239,68,68,0.08)'}`;
+  }
+}
+
+function selectComplianceFramework(fwId) {
+  const cards = ['fw-card-soc2', 'fw-card-iso', 'fw-card-gdpr', 'fw-card-pci'];
+  const cardIdMap = {
+    'soc2_type2': 'fw-card-soc2',
+    'iso27001_2022': 'fw-card-iso',
+    'gdpr': 'fw-card-gdpr',
+    'pci_dss_4': 'fw-card-pci'
+  };
+  
+  cards.forEach(c => {
+    const cardEl = document.getElementById(c);
+    if (cardEl) {
+      cardEl.style.transform = 'none';
+      cardEl.style.borderWidth = '1px';
+    }
+  });
+  
+  const activeCard = document.getElementById(cardIdMap[fwId]);
+  if (activeCard) {
+    activeCard.style.transform = 'translateY(-4px)';
+    activeCard.style.borderWidth = '2px';
+  }
+
+  const report = complianceReports[fwId];
+  if (!report) return;
+  
+  document.getElementById('compliance-selected-framework-name').textContent = `${report.framework_name} Audit Details`;
+  document.getElementById('compliance-selected-framework-desc').textContent = report.metadata.description || `Compliance mapping status and audit readiness controls detail.`;
+  
+  const badgeSummary = document.getElementById('framework-badge-summary');
+  const summary = report.executive_summary || {};
+  badgeSummary.innerHTML = `
+    <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 6px; background: rgba(16,185,129,0.15); color: #10b981;">Compliant: ${summary.compliant_controls || 0}</span>
+    <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 6px; background: rgba(245,158,11,0.15); color: #f59e0b;">Partial: ${summary.partial_controls || 0}</span>
+    <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 6px; background: rgba(239,68,68,0.15); color: #ef4444;">Non-Compliant: ${summary.non_compliant_controls || 0}</span>
+  `;
+  
+  const listEl = document.getElementById('compliance-controls-list');
+  let html = '';
+  
+  const evidenceList = report.control_evidence || [];
+  if (evidenceList.length === 0) {
+    listEl.innerHTML = '<div style="color: var(--color-text-muted); text-align: center; padding: 20px;">No controls found.</div>';
+    return;
+  }
+  
+  evidenceList.forEach(ev => {
+    const isPass = ev.meets_requirement;
+    const statusText = isPass ? 'PASS' : 'FAIL';
+    const statusColor = isPass ? '#10b981' : '#ef4444';
+    const statusBg = isPass ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)';
+    
+    let findingsSection = '';
+    if (ev.findings_count > 0 && currentState.vulnerabilities) {
+      const relevantVulns = currentState.vulnerabilities.filter(v => {
+        const cat = v.category.toLowerCase();
+        const controlRef = ev.control_reference.toLowerCase();
+        if (controlRef.includes('cc7') || controlRef.includes('6.3') || controlRef.includes('6.4')) {
+          return cat.includes('injection') || cat.includes('xss') || cat.includes('access') || cat.includes('secret') || cat.includes('auth');
+        }
+        if (controlRef.includes('32.1')) {
+          return cat.includes('crypto') || cat.includes('data') || cat.includes('privacy');
+        }
+        if (controlRef.includes('a.8')) {
+          return cat.includes('dependency') || cat.includes('vulnerability') || cat.includes('outdated') || cat.includes('config');
+        }
+        return true;
+      }).slice(0, 3);
+      
+      if (relevantVulns.length > 0) {
+        findingsSection = `
+          <div class="control-mapped-findings" style="margin-top: 12px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: 6px; border-left: 3px solid #ef4444;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--color-text-muted); display: block; margin-bottom: 6px;">Triggering Vulnerability Evidence:</span>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              ${relevantVulns.map(v => `
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-text-main);">
+                  <span><strong>${v.title}</strong> in <span style="font-family: var(--font-code); color: var(--accent);">${v.file_path}:${v.line_number}</span></span>
+                  <span style="font-size: 10px; font-weight: 700; color: var(--color-${v.severity.toLowerCase()});">${v.severity}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    const gapsList = ev.gaps && ev.gaps.length > 0
+      ? `<div style="margin-top: 10px; font-size: 12px; color: #ef4444;"><strong>Gaps Identified:</strong> ${ev.gaps.join(', ')}</div>`
+      : '';
+      
+    const recsList = ev.recommendations && ev.recommendations.length > 0
+      ? `<div style="margin-top: 6px; font-size: 12px; color: var(--color-text-muted);"><strong>Remediation:</strong> ${ev.recommendations.join(', ')}</div>`
+      : '';
+
+    html += `
+      <div class="control-row" style="padding: 16px; border: 1px solid var(--border-light); border-radius: 8px; margin-bottom: 12px; background: rgba(255,255,255,0.01); display: flex; flex-direction: column; transition: all 0.2s;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-family: var(--font-title); font-size: 14px; font-weight: 700; color: var(--color-text-main);">${ev.control_name}</span>
+              <span style="font-family: var(--font-code); font-size: 11px; background: rgba(255,255,255,0.05); color: var(--color-text-dark); padding: 2px 6px; border-radius: 4px;">${ev.control_reference}</span>
+            </div>
+            <p style="font-size: 13px; color: var(--color-text-muted); margin-top: 6px; line-height: 1.4;">${ev.evidence_description || 'Evaluated control criteria requirement.'}</p>
+          </div>
+          <span style="font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 4px; background: ${statusBg}; color: ${statusColor}; letter-spacing: 0.5px;">${statusText}</span>
+        </div>
+        ${findingsSection}
+        ${gapsList}
+        ${recsList}
+      </div>
+    `;
+  });
+  
+  listEl.innerHTML = html;
+}
+
 

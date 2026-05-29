@@ -7,6 +7,7 @@ Tests export, risk, secrets, dependencies, and webhook endpoints.
 import os
 import sys
 from datetime import datetime, timezone
+from unittest.mock import patch, AsyncMock
 
 # Ensure backend is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -397,6 +398,131 @@ class TestDownloadEndpoint:
             asyncio.run(db.delete_scan(scan_id))
             import shutil
             shutil.rmtree(clone_dir, ignore_errors=True)
+
+
+class TestWorkflowEndpoints:
+    """Test Custom Swarm Workflows and Compliance Integration."""
+
+    def test_list_workflows(self):
+        """Test listing available agentic workflows."""
+        response = client.get("/api/agents/workflows")
+        assert response.status_code == 200
+        data = response.json()
+        assert "workflows" in data
+        assert "total" in data
+        assert data["total"] > 0
+        
+        # Verify workflow list keys
+        workflows = data["workflows"]
+        first_wf = workflows[0]
+        assert "workflow_id" in first_wf
+        assert "name" in first_wf
+        assert "description" in first_wf
+        assert "required_agents" in first_wf
+
+    def test_generate_compliance_report_frameworks(self):
+        """Test listing available compliance frameworks."""
+        response = client.get("/api/compliance/frameworks")
+        assert response.status_code == 200
+        data = response.json()
+        assert "frameworks" in data
+        assert "total" in data
+        assert data["total"] > 0
+
+    def test_generate_compliance_report_for_scan(self, setup_test_data):
+        """Test generating compliance report for a specific scan."""
+        import asyncio
+        scan_id = "abcde123"
+        scan = create_test_scan_in_db(scan_id)
+        scan.status = "completed"
+        import json
+        scan_dict = json.loads(scan.model_dump_json())
+        asyncio.run(db.save_scan(scan))
+
+        try:
+            response = client.post(
+                "/api/compliance/report/soc2_type2",
+                json={"scan_results": [scan_dict]}
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert "framework_id" in data
+            assert data["framework_id"] == "soc2_type2"
+            assert "executive_summary" in data
+            assert "control_evidence" in data
+        finally:
+            asyncio.run(db.delete_scan(scan_id))
+
+
+class TestGitScanEndpoints:
+    """Test generic Git URLs and custom branch selection for repository scanning."""
+
+    def test_scan_github_custom_branch_success(self):
+        """Test successful scan trigger with custom branch selection."""
+        payload = {
+            "source_type": "github",
+            "source_url": "https://github.com/tiennesdm/CodeShield-AI",
+            "branch": "feature/testing-branch",
+            "config": {
+                "workflow_id": "full_scan",
+                "tools": ["custom_ai"]
+            }
+        }
+        
+        with patch("scanner.github_handler.GitHubHandler.clone_repository", new_callable=AsyncMock) as mock_clone:
+            mock_clone.return_value = "/tmp/fake_clone_dir"
+            
+            # Since _run_scan_with_cleanup runs in the background, we mock it to prevent side-effects
+            with patch("main._run_scan_with_cleanup", new_callable=AsyncMock) as mock_run:
+                response = client.post("/api/scan/github", json=payload)
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "running"
+                assert "scan_id" in data
+                
+                # Check that cloning was called with branch parameter
+                mock_clone.assert_called_once_with(
+                    "https://github.com/tiennesdm/CodeShield-AI",
+                    data["scan_id"],
+                    branch="feature/testing-branch"
+                )
+
+    def test_scan_gitlab_success(self):
+        """Test successful scan trigger with GitLab repository URL."""
+        payload = {
+            "source_type": "git",
+            "source_url": "https://gitlab.com/tiennesdm/CodeShield-AI",
+            "branch": "main",
+            "config": {
+                "workflow_id": "full_scan"
+            }
+        }
+        
+        with patch("scanner.github_handler.GitHubHandler.clone_repository", new_callable=AsyncMock) as mock_clone:
+            mock_clone.return_value = "/tmp/fake_clone_dir"
+            with patch("main._run_scan_with_cleanup", new_callable=AsyncMock) as mock_run:
+                response = client.post("/api/scan/github", json=payload)
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "running"
+                
+                mock_clone.assert_called_once_with(
+                    "https://gitlab.com/tiennesdm/CodeShield-AI",
+                    data["scan_id"],
+                    branch="main"
+                )
+
+    def test_scan_git_invalid_url(self):
+        """Test scanning fails with invalid Git URL hosting domain."""
+        payload = {
+            "source_type": "git",
+            "source_url": "https://some-other-host.com/tiennesdm/CodeShield-AI"
+        }
+        response = client.post("/api/scan/github", json=payload)
+        assert response.status_code == 422
+        assert any("Git URL" in d["msg"] or "Invalid Git URL" in d["msg"] for d in response.json()["detail"])
+
+
 
 
 
