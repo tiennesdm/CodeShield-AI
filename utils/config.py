@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
+    api_url: Optional[str] = None  # Public base URL of this API (for CI generators)
 
     # CORS
     cors_origins: List[str] = [

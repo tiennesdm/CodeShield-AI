@@ -17,3 +17,15 @@ pyyaml>=6.0.0
 
 # Export dependencies
 jinja2>=3.1.0
+
+# Integrations (used by integrations/github_client.py and lsp_server.py)
+aiohttp>=3.9.0
+lsprotocol>=2023.0.0
+
+# Agentic AI / LLM providers
+# The LLM provider layer (llm/) talks to the Anthropic & OpenAI HTTP APIs via
+# httpx (already listed above) and to the local Claude CLI via subprocess, so no
+# vendor SDK is strictly required. Install these only if you prefer the SDKs:
+#   anthropic>=0.39.0
+#   openai>=1.0.0
+# The Claude CLI itself is a Node package: npm install -g @anthropic-ai/claude-code
