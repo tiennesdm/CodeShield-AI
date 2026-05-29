@@ -1444,6 +1444,60 @@ async def generate_ai_fix(
         raise HTTPException(status_code=500, detail=f"Fix generation failed: {str(e)}")
 
 
+@app.get("/api/scan/{scan_id}/file")
+async def get_scan_file(
+    scan_id: str,
+    file_path: str = Query(..., description="Relative path of the file"),
+) -> Dict[str, Any]:
+    _validate_scan_id(scan_id)
+    scan = await db.get_scan(scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    
+    base_dir = os.path.abspath(scan.source_path)
+    target_path = os.path.abspath(os.path.join(base_dir, file_path))
+    if not target_path.startswith(base_dir):
+        raise HTTPException(status_code=400, detail="Invalid file path")
+        
+    if not os.path.exists(target_path) or not os.path.isfile(target_path):
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    try:
+        with open(target_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        return {"content": content, "file_path": file_path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/scan/{scan_id}/file")
+async def save_scan_file(
+    scan_id: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    _validate_scan_id(scan_id)
+    scan = await db.get_scan(scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+        
+    file_path = payload.get("file_path")
+    content = payload.get("content")
+    if not file_path or content is None:
+        raise HTTPException(status_code=400, detail="file_path and content are required")
+        
+    base_dir = os.path.abspath(scan.source_path)
+    target_path = os.path.abspath(os.path.join(base_dir, file_path))
+    if not target_path.startswith(base_dir):
+        raise HTTPException(status_code=400, detail="Invalid file path")
+        
+    try:
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return {"success": True, "message": "File saved successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/vulnerabilities/{vuln_id}/fix/apply")
 async def apply_ai_fix(
     vuln_id: str,
@@ -1478,7 +1532,10 @@ async def apply_ai_fix(
         raise HTTPException(status_code=404, detail="Vulnerability not found")
 
     if not source_path or not os.path.exists(source_path):
-        raise HTTPException(status_code=400, detail="Valid source path is required")
+        if scan.source_path and os.path.exists(scan.source_path):
+            source_path = scan.source_path
+        else:
+            raise HTTPException(status_code=400, detail="Valid source path is required")
 
     try:
         fix_result = await auto_fix_engine.generate_fix(vuln, source_path=None)

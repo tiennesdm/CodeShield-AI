@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/feather-icons"></script>
   
-  <link rel="stylesheet" href="/static/styles.css?v=1.0.1">
+  <link rel="stylesheet" href="/static/styles.css?v=1.0.2">
 </head>
 <body>
 
@@ -38,11 +38,14 @@
         </div>
       </div>
       
-      <div class="sidebar-footer">
+      <div class="sidebar-footer" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
         <div class="status-indicator">
           <span class="pulse-dot" id="status-dot"></span>
           <span id="status-text">Checking Backend...</span>
         </div>
+        <button id="theme-toggle-btn" class="theme-toggle-btn" title="Toggle Light/Dark Theme" style="background: none; border: none; color: var(--color-text-dark); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; transition: all 0.2s;">
+          <i data-feather="sun"></i>
+        </button>
       </div>
     </aside>
 
@@ -258,6 +261,7 @@
               <!-- Agent Swarm Activity Dashboard -->
               <div class="agent-swarm-section">
                 <h3 class="swarm-title">Agent Swarm Activity</h3>
+                <div id="swarm-network-graph" style="height: 180px; margin-bottom: 20px; background: rgba(18, 20, 32, 0.4); border: 1px solid var(--border-light); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;"></div>
                 <div class="agent-grid" id="agent-swarm-grid">
                   <!-- Dynamically populated agents -->
                 </div>
@@ -392,6 +396,21 @@
                 <span class="sev-count" id="count-info">0</span>
                 <span class="sev-name">Info</span>
               </div>
+          </div>
+
+          <!-- Analytics Section -->
+          <div class="analytics-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px;">
+            <div class="card" style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;">
+              <h4 style="margin-bottom: 16px; font-family: var(--font-title); font-size: 16px; color: var(--color-text-main);">Vulnerability Distribution</h4>
+              <div style="height: 220px; position: relative;">
+                <canvas id="severity-chart"></canvas>
+              </div>
+            </div>
+            <div class="card" style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;">
+              <h4 style="margin-bottom: 16px; font-family: var(--font-title); font-size: 16px; color: var(--color-text-main);">Vulnerabilities by Category</h4>
+              <div style="height: 220px; position: relative;">
+                <canvas id="category-chart"></canvas>
+              </div>
             </div>
           </div>
 
@@ -420,12 +439,32 @@
 
       </div>
     </main>
+  <!-- Code Editor Overlay -->
+  <div id="editor-overlay" class="editor-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 9999; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease;">
+    <div class="editor-modal" style="width: 90vw; height: 90vh; background: var(--bg-sidebar); border: 1px solid var(--border-light); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-main);">
+      <div class="editor-modal-header" style="padding: 16px 24px; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2);">
+        <div>
+          <h3 id="editor-filename" style="font-family: var(--font-title); font-size: 18px; color: var(--color-text-main); margin-bottom: 4px;">code_file.py</h3>
+          <span id="editor-filepath" style="font-size: 12px; color: var(--color-text-dark);">path/to/code_file.py</span>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <button id="editor-save-btn" class="export-btn pdf" style="background: var(--accent); padding: 8px 16px; font-size: 13px; border: none; border-radius: 4px; color: white; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+            <i data-feather="save"></i> Save Changes
+          </button>
+          <button id="editor-close-btn" style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 6px; border-radius: 4px; display: flex; align-items: center;">
+            <i data-feather="x" style="width: 20px; height: 20px;"></i>
+          </button>
+        </div>
+      </div>
+      <div id="monaco-editor-container" style="flex: 1; width: 100%; height: 100%;"></div>
+    </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
   <script>
     require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
   </script>
-  <script src="/static/app.js?v=1.0.1"></script>
+  <script src="/static/app.js?v=1.0.2"></script>
 </body>
 </html>

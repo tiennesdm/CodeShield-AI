@@ -1,4 +1,9 @@
 // Global State
+let severityChartInstance = null;
+let categoryChartInstance = null;
+let monacoEditorInstance = null;
+let currentEditingFilePath = null;
+
 let currentState = {
   view: 'welcome', // 'welcome', 'scanning', 'results'
   health: 'offline',
@@ -72,6 +77,78 @@ document.addEventListener('DOMContentLoaded', () => {
   docElements.toggleSidebarBtn.addEventListener('click', () => {
     docElements.sidebar.classList.toggle('collapsed');
   });
+
+  // Theme Toggle Logic
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  const currentTheme = localStorage.getItem('theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', currentTheme);
+  updateThemeIcon(currentTheme);
+
+  themeToggleBtn.addEventListener('click', () => {
+    const activeTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', activeTheme);
+    localStorage.setItem('theme', activeTheme);
+    updateThemeIcon(activeTheme);
+  });
+
+  function updateThemeIcon(theme) {
+    const icon = themeToggleBtn.querySelector('i');
+    if (theme === 'dark') {
+      icon.setAttribute('data-feather', 'sun');
+    } else {
+      icon.setAttribute('data-feather', 'moon');
+    }
+    if (window.feather) feather.replace();
+  }
+
+  // Code Editor Overlay Listeners
+  const closeBtn = document.getElementById('editor-close-btn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      document.getElementById('editor-overlay').classList.add('hidden');
+      if (monacoEditorInstance) {
+        monacoEditorInstance.dispose();
+        monacoEditorInstance = null;
+      }
+    });
+  }
+  
+  const saveBtn = document.getElementById('editor-save-btn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      if (!monacoEditorInstance || !currentEditingFilePath) return;
+      
+      const content = monacoEditorInstance.getValue();
+      const scanId = currentState.activeScanId;
+      
+      try {
+        const response = await fetch(`/api/scan/${scanId}/file`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            file_path: currentEditingFilePath,
+            content: content
+          })
+        });
+        
+        if (response.ok) {
+          alert("File saved successfully!");
+          document.getElementById('editor-overlay').classList.add('hidden');
+          monacoEditorInstance.dispose();
+          monacoEditorInstance = null;
+          // Optionally trigger re-load results
+          loadScanResults(scanId);
+        } else {
+          const err = await response.json();
+          alert("Failed to save: " + (err.detail || "Unknown error"));
+        }
+      } catch (err) {
+        alert("Save failed: " + err.message);
+      }
+    });
+  }
 });
 
 // Switch Tabs between ZIP and Github
@@ -761,6 +838,7 @@ function updateProgress(percent, phaseText, status) {
   docElements.progressBarFill.style.width = `${percent}%`;
   renderAgentSwarm(percent, status);
   updateConceptHighlights(percent, status);
+  renderSwarmNetworkGraph(percent, status);
 }
 
 // Render Results View
@@ -799,6 +877,9 @@ function renderResultsPage(results) {
   
   // Render vulnerabilities
   applyFilters();
+  
+  // Render Analytics Charts
+  renderAnalyticsCharts(results);
 }
 
 // Filters & Vulnerability Card Renderers
@@ -864,6 +945,43 @@ function renderFindingsList(findings) {
       codeHtml += '</div>';
     }
     
+    const flowSteps = [
+      { name: 'Input Source', desc: 'Untrusted user input or package dependency entrypoint.', icon: 'arrow-right-circle', color: '#3b82f6' },
+      { name: 'Taint Propagation', desc: `Traced line execution at ${vuln.file_path}:${vuln.line_number}`, icon: 'git-commit', color: '#f59e0b' },
+      { name: 'Sink / Vulnerable Execution', desc: `${vuln.title} (${vuln.severity} severity)`, icon: 'alert-triangle', color: '#ef4444' }
+    ];
+    
+    let flowHtml = `
+      <div class="taint-flow-container" style="margin-top: 16px; margin-bottom: 16px; padding: 16px; background: rgba(0,0,0,0.15); border: 1px solid var(--border-light); border-radius: 8px;">
+        <h5 style="font-size: 11px; text-transform: uppercase; color: var(--color-text-dark); font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; margin-top: 0;">
+          <i data-feather="git-pull-request" style="width: 12px; height: 12px;"></i> Visual Exploit / Taint Path
+        </h5>
+        <div class="flow-steps-wrapper" style="display: flex; align-items: flex-start; justify-content: space-between; position: relative;">
+    `;
+    
+    flowSteps.forEach((step, idx) => {
+      flowHtml += `
+        <div class="flow-step-item" style="flex: 1; text-align: center; padding: 0 8px; position: relative; z-index: 1;">
+          <div class="flow-icon-circle" style="width: 32px; height: 32px; border-radius: 50%; background: ${step.color}20; border: 2px solid ${step.color}; display: inline-flex; align-items: center; justify-content: center; color: ${step.color}; margin-bottom: 8px;">
+            <i data-feather="${step.icon}" style="width: 16px; height: 16px;"></i>
+          </div>
+          <div style="font-weight: 600; font-size: 12px; color: var(--color-text-main); margin-bottom: 4px;">${step.name}</div>
+          <div style="font-size: 10px; color: var(--color-text-dark); line-height: 1.4;">${step.desc}</div>
+        </div>
+      `;
+      
+      if (idx < flowSteps.length - 1) {
+        flowHtml += `
+          <div class="flow-step-connector" style="flex: 0.5; height: 2px; background: var(--border-light); margin-top: 15px; position: relative; z-index: 0;"></div>
+        `;
+      }
+    });
+    
+    flowHtml += `
+        </div>
+      </div>
+    `;
+
     html += `
       <div class="finding-item ${severityLower}" id="vuln-${vuln.id}">
         <div class="finding-trigger" onclick="toggleFinding('${vuln.id}')">
@@ -885,6 +1003,7 @@ function renderFindingsList(findings) {
             <p>${escapeHTML(vuln.description)}</p>
           </div>
           ${codeHtml}
+          ${flowHtml}
           <div class="finding-desc-group">
             <h4>Suggested Fix</h4>
             <p><strong>Remediation:</strong> ${escapeHTML(vuln.fix_suggestion || 'Review codebase and apply secure patterns.')}</p>
@@ -904,6 +1023,9 @@ function renderFindingsList(findings) {
               </button>
               <button class="action-btn fix-preview-btn" id="preview-btn-${vuln.id}" onclick="previewAutoFix('${vuln.id}', event)" ${vuln.is_fixed ? 'disabled' : ''}>
                 <i data-feather="eye"></i> Preview Diff
+              </button>
+              <button class="action-btn editor-open-btn" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-light); color: var(--color-text-main); display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s;" onclick="openInMonacoEditor('${vuln.id}', event)">
+                <i data-feather="edit-2" style="width: 14px; height: 14px;"></i> Open in Editor
               </button>
             </div>
             <div class="fix-preview-area hidden" id="preview-area-${vuln.id}">
@@ -1097,3 +1219,288 @@ async function applyAutoFix(vulnId, event) {
     alert(`Connection Exception: ${error.message}`);
   }
 }
+
+function renderAnalyticsCharts(results) {
+  if (typeof Chart === 'undefined') {
+    console.warn("Chart.js is not loaded.");
+    return;
+  }
+
+  if (severityChartInstance) {
+    severityChartInstance.destroy();
+  }
+  if (categoryChartInstance) {
+    categoryChartInstance.destroy();
+  }
+  
+  const stats = results.stats || { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+  const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
+  const textColor = isLightTheme ? '#111827' : '#ffffff';
+  
+  // 1. Severity Distribution Chart (Pie/Doughnut)
+  const sevCanvas = document.getElementById('severity-chart');
+  if (sevCanvas) {
+    const sevCtx = sevCanvas.getContext('2d');
+    severityChartInstance = new Chart(sevCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Critical', 'High', 'Medium', 'Low', 'Info'],
+        datasets: [{
+          data: [
+            stats.critical || 0,
+            stats.high || 0,
+            stats.medium || 0,
+            stats.low || 0,
+            stats.info || 0
+          ],
+          backgroundColor: [
+            '#ef4444', // critical
+            '#f97316', // high
+            '#f59e0b', // medium
+            '#10b981', // low
+            '#3b82f6'  // info
+          ],
+          borderWidth: 1,
+          borderColor: isLightTheme ? '#ffffff' : '#121420'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: {
+              color: textColor,
+              font: { family: 'Inter', size: 11 }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // 2. Category Distribution Chart (Bar)
+  const categoryCounts = {};
+  (results.vulnerabilities || []).forEach(v => {
+    categoryCounts[v.category] = (categoryCounts[v.category] || 0) + 1;
+  });
+  
+  const categories = Object.keys(categoryCounts);
+  const counts = Object.values(categoryCounts);
+  
+  const catCanvas = document.getElementById('category-chart');
+  if (catCanvas && categories.length > 0) {
+    const catCtx = catCanvas.getContext('2d');
+    categoryChartInstance = new Chart(catCtx, {
+      type: 'bar',
+      data: {
+        labels: categories,
+        datasets: [{
+          label: 'Issues Count',
+          data: counts,
+          backgroundColor: 'rgba(99, 102, 241, 0.7)',
+          borderColor: '#6366f1',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: {
+              color: textColor,
+              font: { family: 'Inter', size: 10 }
+            }
+          },
+          y: {
+            grid: { color: isLightTheme ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)' },
+            ticks: {
+              color: textColor,
+              font: { family: 'Inter', size: 10 },
+              stepSize: 1
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
+function renderSwarmNetworkGraph(percent, scanStatus) {
+  const container = document.getElementById('swarm-network-graph');
+  if (!container) return;
+
+  const nodes = [
+    { id: 'john', name: 'John (SAST)', x: 60, y: 35, range: [10, 60] },
+    { id: 'sam', name: 'Sam (Secrets)', x: 60, y: 90, range: [15, 60] },
+    { id: 'pam', name: 'Pam (SCA)', x: 60, y: 145, range: [20, 60] },
+    { id: 'tina', name: 'Tina (Taint)', x: 170, y: 90, range: [60, 80] },
+    { id: 'triager', name: 'Triager', x: 280, y: 90, range: [80, 90] },
+    { id: 'fixer', name: 'Fixer', x: 390, y: 90, range: [90, 95] },
+    { id: 'assembler', name: 'Assembler', x: 490, y: 90, range: [95, 100] }
+  ];
+
+  // Helper to determine status color
+  const getStatusColor = (agent) => {
+    if (scanStatus === 'completed') return '#10b981'; // Done
+    if (scanStatus === 'failed') {
+      if (percent >= agent.range[0] && percent < agent.range[1]) return '#ef4444'; // Failed
+      if (percent >= agent.range[1]) return '#10b981'; // Done
+      return '#4b5563'; // Pending
+    }
+    if (percent < agent.range[0]) return '#4b5563'; // Pending
+    if (percent >= agent.range[0] && percent < agent.range[1]) return '#6366f1'; // Active
+    return '#10b981'; // Done
+  };
+
+  // Helper to determine if link is active
+  const isLinkActive = (fromNode, toNode) => {
+    if (scanStatus !== 'running') return false;
+    // Check if the current progress phase matches the connection
+    if (fromNode.id === 'john' || fromNode.id === 'sam' || fromNode.id === 'pam') {
+      return percent >= 10 && percent < 60;
+    }
+    if (fromNode.id === 'tina') return percent >= 60 && percent < 80;
+    if (fromNode.id === 'triager') return percent >= 80 && percent < 90;
+    if (fromNode.id === 'fixer') return percent >= 90 && percent < 95;
+    return false;
+  };
+
+  let linksHtml = '';
+  let pulsesHtml = '';
+  
+  // Render Links and Animated Pulses
+  const connections = [
+    { from: 'john', to: 'tina' },
+    { from: 'sam', to: 'tina' },
+    { from: 'pam', to: 'tina' },
+    { from: 'tina', to: 'triager' },
+    { from: 'triager', to: 'fixer' },
+    { from: 'fixer', to: 'assembler' }
+  ];
+
+  connections.forEach((conn) => {
+    const fromNode = nodes.find(n => n.id === conn.from);
+    const toNode = nodes.find(n => n.id === conn.to);
+    const active = isLinkActive(fromNode, toNode);
+    const color = active ? '#6366f1' : 'rgba(255, 255, 255, 0.08)';
+    const strokeDash = active ? 'stroke-dasharray="4, 2" class="anim-dash"' : '';
+    
+    linksHtml += `<line x1="${fromNode.x}" y1="${fromNode.y}" x2="${toNode.x}" y2="${toNode.y}" stroke="${color}" stroke-width="1.5" ${strokeDash} />`;
+    
+    if (active) {
+      pulsesHtml += `
+        <circle r="3.5" fill="#6366f1" opacity="0.9">
+          <animateMotion dur="1.8s" repeatCount="indefinite"
+            path="M ${fromNode.x} ${fromNode.y} L ${toNode.x} ${toNode.y}" />
+        </circle>
+      `;
+    }
+  });
+
+  let nodesHtml = '';
+  nodes.forEach(node => {
+    const color = getStatusColor(node);
+    const isActive = scanStatus === 'running' && percent >= node.range[0] && percent < node.range[1];
+    
+    // Glowing ring for active node
+    const glowHtml = isActive ? `
+      <circle cx="${node.x}" cy="${node.y}" r="15" fill="none" stroke="#6366f1" stroke-width="2" opacity="0.8">
+        <animate attributeName="r" values="8;18;8" dur="1.5s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.8;0;0.8" dur="1.5s" repeatCount="indefinite" />
+      </circle>
+    ` : '';
+    
+    nodesHtml += `
+      <g>
+        ${glowHtml}
+        <circle cx="${node.x}" cy="${node.y}" r="8" fill="${color}" stroke="rgba(255,255,255,0.15)" stroke-width="2" />
+        <text x="${node.x}" y="${node.y - 14}" text-anchor="middle" fill="var(--color-text-muted)" font-family="Inter" font-size="9" font-weight="600">${node.name}</text>
+      </g>
+    `;
+  });
+
+  const svg = `
+    <svg width="100%" height="100%" viewBox="0 0 540 180" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style>
+          .anim-dash {
+            animation: dash 1s linear infinite;
+          }
+          @keyframes dash {
+            to {
+              stroke-dashoffset: -6;
+            }
+          }
+        </style>
+      </defs>
+      ${linksHtml}
+      ${pulsesHtml}
+      ${nodesHtml}
+    </svg>
+  `;
+
+  container.innerHTML = svg;
+}
+
+async function openInMonacoEditor(vulnId, event) {
+  if (event) event.stopPropagation();
+  
+  const vuln = currentState.vulnerabilities.find(v => v.id === vulnId);
+  if (!vuln) return;
+  
+  const scanId = currentState.activeScanId;
+  const filePath = vuln.file_path;
+  currentEditingFilePath = filePath;
+  
+  document.getElementById('editor-filename').textContent = filePath.split('/').pop();
+  document.getElementById('editor-filepath').textContent = filePath;
+  
+  const overlay = document.getElementById('editor-overlay');
+  overlay.classList.remove('hidden');
+  
+  const container = document.getElementById('monaco-editor-container');
+  container.innerHTML = '';
+  
+  try {
+    const response = await fetch(`/api/scan/${scanId}/file?file_path=${encodeURIComponent(filePath)}`);
+    if (response.ok) {
+      const data = await response.json();
+      
+      require(['vs/editor/editor.main'], function () {
+        let language = 'javascript';
+        const ext = filePath.split('.').pop().toLowerCase();
+        if (ext === 'py') language = 'python';
+        else if (ext === 'js') language = 'javascript';
+        else if (ext === 'ts') language = 'typescript';
+        else if (ext === 'json') language = 'json';
+        else if (ext === 'html') language = 'html';
+        else if (ext === 'css') language = 'css';
+        else if (ext === 'go') language = 'go';
+        else if (ext === 'java') language = 'java';
+        else if (ext === 'sh') language = 'shell';
+        
+        monacoEditorInstance = monaco.editor.create(container, {
+          value: data.content || '',
+          language: language,
+          theme: 'vs-dark',
+          automaticLayout: true
+        });
+      });
+    } else {
+      alert("Failed to fetch file content.");
+    }
+  } catch (err) {
+    alert("Connection error: " + err.message);
+  }
+}
+

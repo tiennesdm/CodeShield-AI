@@ -34,6 +34,28 @@
   --sidebar-width: 280px;
 }
 
+[data-theme="light"] {
+  --bg-app: #f3f4f6;
+  --bg-card: rgba(255, 255, 255, 0.8);
+  --bg-sidebar: #ffffff;
+  --bg-nav: rgba(243, 244, 246, 0.85);
+  
+  --border-light: rgba(0, 0, 0, 0.08);
+  --border-focus: rgba(99, 102, 241, 0.6);
+  
+  --color-text-main: #111827;
+  --color-text-muted: #4b5563;
+  --color-text-dark: #6b7280;
+  
+  --shadow-main: 0 8px 32px 0 rgba(31, 41, 55, 0.08);
+  --shadow-glow: 0 0 15px rgba(99, 102, 241, 0.1);
+}
+
+.theme-toggle-btn:hover {
+  background: var(--border-light) !important;
+  color: var(--accent) !important;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -1689,4 +1711,16 @@ input:focus, select:focus {
   background-color: rgba(239, 68, 68, 0.15);
   display: block;
   padding: 2px 4px;
+}
+
+.editor-overlay {
+  opacity: 1;
+  visibility: visible;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.editor-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
 }
