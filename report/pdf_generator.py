@@ -403,7 +403,7 @@ class PDFGenerator:
             stats = scan_result.stats
             severities = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
             counts = [stats.get(s.lower(), 0) for s in severities]
-            colors_list = [str(SEVERITY_COLORS[s]) for s in severities]
+            colors_list = [_color_hex(SEVERITY_COLORS[s]) for s in severities]
 
             if sum(counts) > 0:
                 bars = ax.bar(severities, counts, color=colors_list, edgecolor="white", linewidth=1.5)
@@ -463,7 +463,7 @@ class PDFGenerator:
                 counts = [c[1] for c in top_categories]
 
                 fig, ax = plt.subplots(figsize=(6, 3.5))
-                ax.barh(categories, counts, color=BRAND_SECONDARY)
+                ax.barh(categories, counts, color=_color_hex(BRAND_SECONDARY))
                 ax.set_xlabel("Count")
                 ax.set_title("Top Vulnerability Categories")
                 ax.invert_yaxis()

@@ -563,6 +563,7 @@ async def scan_github(request: ScanRequest) -> Dict[str, Any]:
         name=scan_name,
         source_type="github",
         source_path=source_path,
+        source_url=request.source_url,
         status="running",
         progress=0,
     )
@@ -578,6 +579,7 @@ async def scan_github(request: ScanRequest) -> Dict[str, Any]:
             name=scan_name,
             config=request.config,
             db=db,
+            source_url=request.source_url,
         )
     )
     active_scans[scan_id] = task
@@ -607,6 +609,7 @@ async def _run_scan_with_cleanup(
     name: str,
     config: Any,
     db: JSONDatabase,
+    source_url: Optional[str] = None,
 ) -> None:
     """Run a scan and clean up temp files afterward."""
     try:
@@ -617,6 +620,7 @@ async def _run_scan_with_cleanup(
             name=name,
             config=config,
             db=db,
+            source_url=source_url,
         )
     finally:
         # Clean up extracted source files after scan completes/fails
@@ -758,6 +762,117 @@ async def get_pdf_report(scan_id: str) -> StreamingResponse:
     except Exception as e:
         logger.error("Failed to generate PDF for scan %s: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
+
+
+@app.get("/api/scan/{scan_id}/download")
+async def download_patched_code(scan_id: str) -> StreamingResponse:
+    """
+    Apply auto-fixes to all vulnerabilities and download the patched code as a ZIP file.
+
+    Args:
+        scan_id: The scan ID
+
+    Returns:
+        ZIP file containing patched code
+    """
+    import io
+    import shutil
+    import zipfile
+    from pathlib import Path
+    from scanner.zip_handler import ZipHandler
+
+    _validate_scan_id(scan_id)
+    scan = await db.get_scan(scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    if scan.status not in ("completed", "failed"):
+        raise HTTPException(status_code=400, detail="Scan is not yet complete")
+
+    source_dir_to_use = None
+    temp_dir = None
+    intermediate_dir = None
+
+    if scan.source_type == "github":
+        if not scan.source_url:
+            raise HTTPException(
+                status_code=400,
+                detail="GitHub URL is not available in the scan details"
+            )
+        from scanner.github_handler import GitHubHandler
+        gh = GitHubHandler()
+        try:
+            source_dir_to_use_str = await gh.clone_repository(scan.source_url, f"patched_download_{scan_id}")
+            source_dir_to_use = Path(source_dir_to_use_str)
+            temp_dir = source_dir_to_use
+        except Exception as e:
+            logger.error("Failed to re-clone repository for scan %s: %s", scan_id, e)
+            raise HTTPException(status_code=500, detail=f"Failed to clone GitHub repository: {str(e)}")
+    else:
+        # Locate the original ZIP file
+        zip_path = settings.temp_dir / f"extract_{scan_id}" / f"upload_{scan_id}.zip"
+        if not zip_path.exists():
+            # Fallback to check if the extracted dir exists (in case it wasn't cleaned up)
+            extracted_dir = settings.temp_dir / f"zip_{scan_id}"
+            if not extracted_dir.exists():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Original ZIP file or scanned source directory not found on server"
+                )
+            source_dir_to_use = extracted_dir
+        else:
+            # Re-extract the ZIP to a clean temporary directory for patching
+            temp_dir = settings.temp_dir / f"patched_download_{scan_id}"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                zh = ZipHandler()
+                source_dir_to_use_str, _, _ = zh.process_upload(str(zip_path), f"patched_download_{scan_id}")
+                source_dir_to_use = Path(source_dir_to_use_str)
+                intermediate_dir = settings.temp_dir / f"zip_patched_download_{scan_id}"
+            except Exception as e:
+                logger.error("Failed to re-extract ZIP for scan %s: %s", scan_id, e)
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                raise HTTPException(status_code=500, detail=f"Failed to process source ZIP: {str(e)}")
+
+    # Apply fixes to the extracted files in the temp directory
+    try:
+        for vuln in scan.vulnerabilities:
+            try:
+                # Generate fix (with fallback to LLM, or deterministic if LLM not configured)
+                fix_result = await auto_fix_engine.generate_fix(vuln, source_path=str(source_dir_to_use))
+                if fix_result and fix_result.fixed_code:
+                    await auto_fix_engine.apply_fix_to_file(
+                        vuln, fix_result, str(source_dir_to_use)
+                    )
+            except Exception as e:
+                # Log error but continue applying other fixes
+                logger.warning("Failed to generate/apply fix for vuln %s in download: %s", vuln.id, e)
+
+        # Now, zip the patched directory
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root, _, files in os.walk(source_dir_to_use):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, source_dir_to_use)
+                    zf.write(file_path, arcname)
+
+        memory_file.seek(0)
+        
+        filename = f"patched_{scan.name.replace('/', '_').replace(' ', '_')}_{scan_id}.zip"
+        return StreamingResponse(
+            memory_file,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            },
+        )
+    finally:
+        # Clean up the re-extracted/patched temp directories
+        if temp_dir and temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        if intermediate_dir and intermediate_dir.exists():
+            shutil.rmtree(intermediate_dir, ignore_errors=True)
 
 
 # =============================================================================

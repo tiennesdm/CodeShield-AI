@@ -291,3 +291,112 @@ class TestWebhookEndpoints:
         """Test deleting non-existent webhook."""
         response = client.delete("/api/webhook/nonexistent")
         assert response.status_code == 404
+
+
+class TestDownloadEndpoint:
+    """Tests for /api/scan/{scan_id}/download endpoint."""
+
+    def test_download_not_found(self):
+        """Test download for non-existent scan."""
+        response = client.get("/api/scan/abcdef99/download")
+        assert response.status_code == 404
+
+    def test_download_not_completed(self, setup_test_data):
+        """Test download for pending/running scan."""
+        import asyncio
+        # Create a scan that is running
+        scan_id = "abcdef88"
+        scan = create_test_scan_in_db(scan_id)
+        scan.status = "running"
+        asyncio.run(db.save_scan(scan))
+
+        try:
+            response = client.get(f"/api/scan/{scan_id}/download")
+            assert response.status_code == 400
+            assert "Scan is not yet complete" in response.json()["detail"]
+        finally:
+            asyncio.run(db.delete_scan(scan_id))
+
+    def test_download_success(self, setup_test_data):
+        """Test successful patched code download."""
+        import asyncio
+        import zipfile
+        import io
+        from utils.config import get_settings
+        
+        scan_id = "abcdef77"
+        scan = create_test_scan_in_db(scan_id)
+        scan.status = "completed"
+        
+        settings = get_settings()
+        extract_dir = settings.temp_dir / f"extract_{scan_id}"
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = extract_dir / f"upload_{scan_id}.zip"
+        
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("src/app.py", "cursor.execute(query)\n")
+            zf.writestr("config/settings.py", "API_KEY = 'secret'\n")
+
+        asyncio.run(db.save_scan(scan))
+
+        try:
+            response = client.get(f"/api/scan/{scan_id}/download")
+            assert response.status_code == 200
+            assert "application/zip" in response.headers["content-type"]
+            assert f"patched_Test_Scan_{scan_id}.zip" in response.headers["content-disposition"]
+            
+            resp_zip_data = io.BytesIO(response.content)
+            with zipfile.ZipFile(resp_zip_data, "r") as zf:
+                file_list = zf.namelist()
+                assert "src/app.py" in file_list
+                assert "config/settings.py" in file_list
+        finally:
+            asyncio.run(db.delete_scan(scan_id))
+            import shutil
+            shutil.rmtree(extract_dir, ignore_errors=True)
+
+    def test_download_github_success(self, setup_test_data):
+        """Test successful patched code download for github scans."""
+        import asyncio
+        import zipfile
+        import io
+        from unittest.mock import patch, AsyncMock
+        from utils.config import get_settings
+        
+        scan_id = "abcdef66"
+        scan = create_test_scan_in_db(scan_id)
+        scan.source_type = "github"
+        scan.source_url = "https://github.com/tiennesdm/CodeShield-AI"
+        scan.status = "completed"
+        
+        settings = get_settings()
+        clone_dir = settings.temp_dir / f"github_patched_download_{scan_id}_CodeShield-AI"
+        clone_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create mock file in the clone directory
+        src_dir = clone_dir / "src"
+        src_dir.mkdir(parents=True, exist_ok=True)
+        with open(src_dir / "app.py", "w") as f:
+            f.write("cursor.execute(query)\n")
+            
+        asyncio.run(db.save_scan(scan))
+
+        try:
+            with patch("scanner.github_handler.GitHubHandler.clone_repository", new_callable=AsyncMock) as mock_clone:
+                mock_clone.return_value = str(clone_dir)
+                response = client.get(f"/api/scan/{scan_id}/download")
+                assert response.status_code == 200
+                assert "application/zip" in response.headers["content-type"]
+                assert f"patched_Test_Scan_{scan_id}.zip" in response.headers["content-disposition"]
+                
+                resp_zip_data = io.BytesIO(response.content)
+                with zipfile.ZipFile(resp_zip_data, "r") as zf:
+                    file_list = zf.namelist()
+                    assert "src/app.py" in file_list
+        finally:
+            asyncio.run(db.delete_scan(scan_id))
+            import shutil
+            shutil.rmtree(clone_dir, ignore_errors=True)
+
+
+

@@ -64,6 +64,7 @@ class ScanEngine:
         name: str,
         config: Optional[ScanConfig] = None,
         db=None,
+        source_url: Optional[str] = None,
     ) -> ScanResult:
         """
         Run a complete scan on the given source code.
@@ -75,6 +76,7 @@ class ScanEngine:
             name: Human-readable scan name
             config: Optional scan configuration
             db: Optional database instance for progress updates
+            source_url: Optional source URL (e.g. GitHub URL)
 
         Returns:
             Complete ScanResult with all findings
@@ -87,6 +89,7 @@ class ScanEngine:
             name=name or f"Scan {scan_id}",
             source_type=source_type,
             source_path=source_path,
+            source_url=source_url,
             status="running",
             progress=0,
             start_time=datetime.now(timezone.utc),
