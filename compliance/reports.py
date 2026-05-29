@@ -111,6 +111,22 @@ class ComplianceReport(BaseModel):
     scan_summary: Dict[str, Any] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
+    @property
+    def executive_summary(self) -> Dict[str, Any]:
+        """High-level summary of the report (also embedded in to_dict)."""
+        return {
+            "overall_compliance_percentage": round(self.overall_compliance_percentage, 1),
+            "total_controls": self.total_controls,
+            "compliant_controls": self.compliant_controls,
+            "partial_controls": self.partial_controls,
+            "non_compliant_controls": self.non_compliant_controls,
+            "not_applicable_controls": self.not_applicable_controls,
+            "maturity_score": self.maturity_score,
+            "risk_level": self.risk_level,
+            "trend_direction": self.trend_direction,
+            "previous_score": self.previous_score,
+        }
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
@@ -124,18 +140,7 @@ class ComplianceReport(BaseModel):
                 "start": self.report_period_start.isoformat() if self.report_period_start else None,
                 "end": self.report_period_end.isoformat() if self.report_period_end else None,
             },
-            "executive_summary": {
-                "overall_compliance_percentage": round(self.overall_compliance_percentage, 1),
-                "total_controls": self.total_controls,
-                "compliant_controls": self.compliant_controls,
-                "partial_controls": self.partial_controls,
-                "non_compliant_controls": self.non_compliant_controls,
-                "not_applicable_controls": self.not_applicable_controls,
-                "maturity_score": self.maturity_score,
-                "risk_level": self.risk_level,
-                "trend_direction": self.trend_direction,
-                "previous_score": self.previous_score,
-            },
+            "executive_summary": self.executive_summary,
             "control_evidence": [e.to_dict() for e in self.control_evidence],
             "gaps": [g.to_dict() for g in self.gaps],
             "recommendations": self.recommendations,
