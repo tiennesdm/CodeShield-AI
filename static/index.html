@@ -131,6 +131,13 @@
                 <input type="text" id="zip-scan-name" placeholder="E.g., Web App Beta">
               </div>
               
+              <div class="form-group">
+                <label for="zip-workflow">Swarm Agent Workflow</label>
+                <select id="zip-workflow" name="workflow_id">
+                  <option value="">Standard Scan (Local SAST)</option>
+                </select>
+              </div>
+              
               <button type="button" class="collapsible-trigger" onclick="toggleAdvancedSettings('zip')">
                 <span>Advanced Scan Settings</span>
                 <i data-feather="chevron-down" id="adv-chevron-zip"></i>
@@ -177,7 +184,7 @@
             <!-- GitHub Form -->
             <form id="github-form" class="tab-content" onsubmit="submitGithub(event)">
               <div class="form-group">
-                <label for="github-url-input">GitHub Repository URL</label>
+                <label for="github-url-input">Git Repository URL (GitHub, GitLab, Bitbucket)</label>
                 <div class="input-with-icon">
                   <i data-feather="link" class="input-icon"></i>
                   <input type="url" id="github-url-input" placeholder="https://github.com/username/repo" required>
@@ -185,8 +192,23 @@
               </div>
               
               <div class="form-group">
+                <label for="github-branch">Branch (Optional)</label>
+                <div class="input-with-icon">
+                  <i data-feather="git-branch" class="input-icon"></i>
+                  <input type="text" id="github-branch" placeholder="E.g., main, dev, feature-branch">
+                </div>
+              </div>
+              
+              <div class="form-group">
                 <label for="github-scan-name">Project Name (Optional)</label>
                 <input type="text" id="github-scan-name" placeholder="E.g., Production API">
+              </div>
+              
+              <div class="form-group">
+                <label for="github-workflow">Swarm Agent Workflow</label>
+                <select id="github-workflow" name="workflow_id">
+                  <option value="">Standard Scan (Local SAST)</option>
+                </select>
               </div>
               
               <button type="button" class="collapsible-trigger" onclick="toggleAdvancedSettings('github')">
@@ -364,6 +386,7 @@
                 <h2 id="results-project-name">Project Scan Results</h2>
                 <div class="meta-row">
                   <span class="meta-item"><i data-feather="tag"></i> ID: <span id="results-scan-id">-</span></span>
+                  <span class="meta-item" id="results-branch-container" style="display: none;"><i data-feather="git-branch"></i> Branch: <span id="results-branch">-</span></span>
                   <span class="meta-item"><i data-feather="code"></i> Languages: <span id="results-languages">-</span></span>
                   <span class="meta-item"><i data-feather="folder"></i> Files scanned: <span id="results-total-files">-</span></span>
                   <span class="meta-item"><i data-feather="clock"></i> Duration: <span id="results-duration">-</span>s</span>
@@ -414,8 +437,18 @@
             </div>
           </div>
 
-          <!-- Findings Filters & List -->
-          <div class="findings-container">
+          <!-- Results View Tabs Navigation -->
+          <div class="results-tabs" style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border-light); padding-bottom: 12px;">
+            <button class="results-tab-btn active" id="res-tab-vulns" onclick="switchResultsTab('vulns')" style="background: none; border: none; padding: 8px 16px; border-radius: 6px; font-family: var(--font-title); font-size: 15px; font-weight: 600; cursor: pointer; color: var(--color-text-main); display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
+              <i data-feather="alert-triangle"></i> Vulnerabilities
+            </button>
+            <button class="results-tab-btn" id="res-tab-compliance" onclick="switchResultsTab('compliance')" style="background: none; border: none; padding: 8px 16px; border-radius: 6px; font-family: var(--font-title); font-size: 15px; font-weight: 600; cursor: pointer; color: var(--color-text-muted); display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
+              <i data-feather="check-square"></i> Compliance Audit
+            </button>
+          </div>
+
+          <!-- Tab Content: Vulnerabilities -->
+          <div class="findings-container" id="vulns-tab-content">
             <div class="findings-header">
               <h3>Vulnerabilities Detected (<span id="findings-total-count">0</span>)</h3>
               <div class="filter-bar">
@@ -433,6 +466,93 @@
             
             <div class="findings-list" id="findings-list">
               <!-- Vulnerability cards loaded dynamically -->
+            </div>
+          </div>
+
+          <!-- Tab Content: Compliance Audit -->
+          <div class="compliance-tab-content hidden" id="compliance-tab-content">
+            <!-- Frameworks Overview Grid -->
+            <div class="compliance-frameworks-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 28px;">
+              <!-- SOC 2 Card -->
+              <div class="framework-card" id="fw-card-soc2" onclick="selectComplianceFramework('soc2_type2')" style="cursor: pointer; padding: 20px; background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 12px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 16px;">
+                <div class="framework-meta" style="display: flex; flex-direction: column; gap: 4px;">
+                  <span class="framework-name" style="font-family: var(--font-title); font-size: 16px; font-weight: 700; color: var(--color-text-main);">SOC 2 Type II</span>
+                  <span class="framework-status" id="fw-status-soc2" style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px; width: fit-content; text-transform: uppercase;">Checking...</span>
+                </div>
+                <div class="framework-gauge-container" style="display: flex; align-items: center; justify-content: space-between;">
+                  <span class="gauge-percent" id="percent-soc2" style="font-family: var(--font-title); font-size: 28px; font-weight: 800; color: var(--color-text-main);">0%</span>
+                  <div style="width: 48px; height: 48px; position: relative;">
+                    <svg viewBox="0 0 36 36" style="width: 100%; height: 100%;">
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3" />
+                      <path id="circle-soc2" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round" style="transition: stroke-dasharray 0.8s ease;" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <!-- ISO 27001 Card -->
+              <div class="framework-card" id="fw-card-iso" onclick="selectComplianceFramework('iso27001_2022')" style="cursor: pointer; padding: 20px; background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 12px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 16px;">
+                <div class="framework-meta" style="display: flex; flex-direction: column; gap: 4px;">
+                  <span class="framework-name" style="font-family: var(--font-title); font-size: 16px; font-weight: 700; color: var(--color-text-main);">ISO 27001:2022</span>
+                  <span class="framework-status" id="fw-status-iso" style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px; width: fit-content; text-transform: uppercase;">Checking...</span>
+                </div>
+                <div class="framework-gauge-container" style="display: flex; align-items: center; justify-content: space-between;">
+                  <span class="gauge-percent" id="percent-iso" style="font-family: var(--font-title); font-size: 28px; font-weight: 800; color: var(--color-text-main);">0%</span>
+                  <div style="width: 48px; height: 48px; position: relative;">
+                    <svg viewBox="0 0 36 36" style="width: 100%; height: 100%;">
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3" />
+                      <path id="circle-iso" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round" style="transition: stroke-dasharray 0.8s ease;" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <!-- GDPR Card -->
+              <div class="framework-card" id="fw-card-gdpr" onclick="selectComplianceFramework('gdpr')" style="cursor: pointer; padding: 20px; background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 12px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 16px;">
+                <div class="framework-meta" style="display: flex; flex-direction: column; gap: 4px;">
+                  <span class="framework-name" style="font-family: var(--font-title); font-size: 16px; font-weight: 700; color: var(--color-text-main);">GDPR Privacy</span>
+                  <span class="framework-status" id="fw-status-gdpr" style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px; width: fit-content; text-transform: uppercase;">Checking...</span>
+                </div>
+                <div class="framework-gauge-container" style="display: flex; align-items: center; justify-content: space-between;">
+                  <span class="gauge-percent" id="percent-gdpr" style="font-family: var(--font-title); font-size: 28px; font-weight: 800; color: var(--color-text-main);">0%</span>
+                  <div style="width: 48px; height: 48px; position: relative;">
+                    <svg viewBox="0 0 36 36" style="width: 100%; height: 100%;">
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3" />
+                      <path id="circle-gdpr" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round" style="transition: stroke-dasharray 0.8s ease;" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <!-- PCI DSS Card -->
+              <div class="framework-card" id="fw-card-pci" onclick="selectComplianceFramework('pci_dss_4')" style="cursor: pointer; padding: 20px; background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 12px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 16px;">
+                <div class="framework-meta" style="display: flex; flex-direction: column; gap: 4px;">
+                  <span class="framework-name" style="font-family: var(--font-title); font-size: 16px; font-weight: 700; color: var(--color-text-main);">PCI DSS v4.0</span>
+                  <span class="framework-status" id="fw-status-pci" style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px; width: fit-content; text-transform: uppercase;">Checking...</span>
+                </div>
+                <div class="framework-gauge-container" style="display: flex; align-items: center; justify-content: space-between;">
+                  <span class="gauge-percent" id="percent-pci" style="font-family: var(--font-title); font-size: 28px; font-weight: 800; color: var(--color-text-main);">0%</span>
+                  <div style="width: 48px; height: 48px; position: relative;">
+                    <svg viewBox="0 0 36 36" style="width: 100%; height: 100%;">
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3" />
+                      <path id="circle-pci" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round" style="transition: stroke-dasharray 0.8s ease;" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Selected Framework Control Mapping Detail -->
+            <div class="compliance-detail-section card" style="padding: 24px;">
+              <div class="detail-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-light); padding-bottom: 12px;">
+                <div>
+                  <h3 id="compliance-selected-framework-name" style="font-family: var(--font-title); font-size: 20px; color: var(--color-text-main);">SOC 2 Type II Audit Mapping</h3>
+                  <p id="compliance-selected-framework-desc" style="font-size: 13px; color: var(--color-text-muted); margin-top: 4px;">Mapping scanner findings to Trust Services Criteria controls.</p>
+                </div>
+                <div class="framework-badge-summary" id="framework-badge-summary" style="display: flex; gap: 8px;">
+                  <!-- Badge counts dynamically updated -->
+                </div>
+              </div>
+              <div class="compliance-controls-list" id="compliance-controls-list">
+                <!-- Control rows loaded dynamically -->
+              </div>
             </div>
           </div>
         </section>

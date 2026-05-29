@@ -26,6 +26,23 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder to safely serialize datetime, Path, and other objects."""
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, Path):
+            return str(obj)
+        if isinstance(obj, set):
+            return list(obj)
+        try:
+            return super().default(obj)
+        except TypeError:
+            return str(obj)
+
+
+
 class MessageType(str, Enum):
     """Types of messages exchanged between agents."""
 
@@ -378,7 +395,7 @@ class AgentCommunicationBus:
             file_path = self._persistence_dir / f"messages_{date_str}.jsonl"
 
             with open(file_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(message.to_dict()) + "\n")
+                f.write(json.dumps(message.to_dict(), cls=DateTimeEncoder) + "\n")
         except Exception as e:
             logger.error("Failed to persist message %s: %s", message.message_id, e)
 
