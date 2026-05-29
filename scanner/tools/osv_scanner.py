@@ -19,7 +19,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -780,7 +780,7 @@ class OSVScanner:
             cvss_score=cvss,
             owasp_category="A06",
             confidence="HIGH",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
     @staticmethod

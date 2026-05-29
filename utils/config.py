@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -62,12 +62,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "json"  # json or text
 
-    class Config:
-        """Pydantic settings configuration."""
-
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
     def __init__(self, **kwargs):
         """Initialize settings and ensure directories exist."""

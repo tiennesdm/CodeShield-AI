@@ -17,7 +17,7 @@ import ast
 import math
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Pattern, Tuple
 
@@ -1062,7 +1062,7 @@ class LLMSecurityScanner:
             cvss_score=cvss_map.get(severity, 5.0),
             owasp_category=owasp_category,
             confidence="HIGH" if severity in ("CRITICAL", "HIGH") else "MEDIUM",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
     def _get_owasp_llm_fix(self, llm_id: str) -> str:

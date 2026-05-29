@@ -21,7 +21,7 @@ import ast
 import math
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Pattern, Tuple
 
@@ -628,7 +628,7 @@ class CustomAIScanner:
                         cvss_score=self._get_cvss_score(severity),
                         owasp_category=OWASP_MAP.get(cwe_id),
                         confidence="HIGH" if severity in ("CRITICAL", "HIGH") else "MEDIUM",
-                        created_at=datetime.utcnow(),
+                        created_at=datetime.now(timezone.utc),
                     )
                     vulnerabilities.append(vuln)
 
@@ -712,7 +712,7 @@ class CustomAIScanner:
                             cvss_score=7.5,
                             owasp_category="A07",
                             confidence="MEDIUM",
-                            created_at=datetime.utcnow(),
+                            created_at=datetime.now(timezone.utc),
                         )
                         vulnerabilities.append(vuln)
 
@@ -771,7 +771,7 @@ class CustomAIScanner:
                                         cvss_score=7.0,
                                         owasp_category="A07",
                                         confidence="HIGH",
-                                        created_at=datetime.utcnow(),
+                                        created_at=datetime.now(timezone.utc),
                                     )
                                     vulnerabilities.append(vuln)
 
@@ -813,7 +813,7 @@ class CustomAIScanner:
                             cvss_score=9.8,
                             owasp_category="A03",
                             confidence="HIGH",
-                            created_at=datetime.utcnow(),
+                            created_at=datetime.now(timezone.utc),
                         )
                         vulnerabilities.append(vuln)
 
@@ -845,7 +845,7 @@ class CustomAIScanner:
                                 cvss_score=8.1 if func_name in ("pickle", "cPickle") else 6.5,
                                 owasp_category="A08",
                                 confidence="HIGH",
-                                created_at=datetime.utcnow(),
+                                created_at=datetime.now(timezone.utc),
                             )
                             vulnerabilities.append(vuln)
 
@@ -881,7 +881,7 @@ class CustomAIScanner:
                                             cvss_score=7.5,
                                             owasp_category="A07",
                                             confidence="HIGH",
-                                            created_at=datetime.utcnow(),
+                                            created_at=datetime.now(timezone.utc),
                                         )
                                         vulnerabilities.append(vuln)
 
