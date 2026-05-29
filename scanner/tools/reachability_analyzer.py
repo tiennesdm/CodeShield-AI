@@ -239,7 +239,7 @@ class DependencyGraphBuilder:
                         continue
 
                     # Parse package==version format
-                    match = re.match(r"^([a-zA-Z0-9_\-\.]+)\s*==?\s*([^\s;]+)", line)
+                    match = re.match(r"^([a-zA-Z0-9_\-\.]+)\s*(?:\[[^\]]*\])?\s*(?:===|==|>=|<=|~=|!=|>|<)\s*([^\s;,]+)", line)
                     if match:
                         name = match.group(1)
                         version = match.group(2)
