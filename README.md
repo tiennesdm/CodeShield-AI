@@ -1,25 +1,54 @@
-# CodeShield AI - Python Scanning Engine
+# CodeShield AI
 
-A comprehensive, production-ready FastAPI-based code vulnerability scanning engine that integrates multiple open-source SAST (Static Application Security Testing) tools. CodeShield AI accepts code via ZIP upload or GitHub URL, automatically detects programming languages, runs appropriate security scanners, and returns structured vulnerability data with PDF report generation.
+**Production-ready application security platform** — multi-scanner SAST, secret & dependency analysis, an agentic AI "security team", Responsible-AI governance, and a modern, fully responsive HTML report.
+
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-1025%20passing-3fb950)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
+CodeShield AI ingests code via ZIP upload or GitHub URL, auto-detects languages, runs the appropriate security scanners in parallel (coordinated by a multi-agent orchestrator), validates findings with AI triage, and produces structured results plus self-contained PDF/HTML reports.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Agentic AI, LLM Providers & Responsible AI](#agentic-ai-llm-providers--responsible-ai)
+- [HTML Report UI](#html-report-ui)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [API Documentation](#api-documentation)
+- [Scan Configuration](#scan-configuration)
+- [Data Models](#data-models)
+- [Available Scanners and Detections](#available-scanners-and-detections)
+- [Development](#development)
+- [License](#license)
+
+---
 
 ## Features
 
-- **Multi-Language Support**: Python, JavaScript/TypeScript, Java, Go, Ruby, PHP, C#, and more
-- **8 Integrated Scanners**:
-  - **Semgrep** - Multi-language SAST with security rules
-  - **ESLint** - JavaScript/TypeScript/React/React Native analysis
-  - **Pylint** - Python code quality
-  - **Bandit** - Python security vulnerabilities
-  - **PMD** - Java static analysis
-  - **Gitleaks** - Secret detection (API keys, passwords, tokens)
-  - **OWASP Dependency-Check** - Vulnerable dependency scanning
-  - **Custom AI Scanner** - Built-in pattern engine (no dependencies)
-- **Async Processing**: All scans run asynchronously with progress tracking
-- **Language Auto-Detection**: Automatically selects scanners based on detected languages
-- **Standardized Output**: All tool outputs normalized to common Vulnerability format with CWE mapping
-- **PDF Reports**: Professional reports with charts, code snippets, and OWASP compliance matrix
-- **Path Traversal Protection**: Secure file handling with sanitized paths
-- **Graceful Degradation**: Scans continue even if some tools are not installed
+### Core scanning
+- **Multi-language**: Python, JavaScript/TypeScript, Java, Go, Ruby, PHP, C#, and more
+- **8 integrated scanners**: Semgrep, ESLint, Pylint, Bandit, PMD, Gitleaks, OWASP Dependency-Check, and a dependency-free Custom AI Scanner
+- **Async & parallel**: all scans run asynchronously with live progress tracking
+- **Language auto-detection**: scanners are selected from detected languages
+- **Standardized output**: every tool is normalized to a common `Vulnerability` model with CWE/OWASP mapping
+- **Graceful degradation**: scans continue even when some tools are not installed
+
+### Intelligence & automation
+- **Multi-agent orchestrator (HAL)**: coordinates SAST / DAST / secrets / SCA / taint / LLM agents across phases
+- **AI triage**: hybrid heuristics plus optional LLM to cut false positives
+- **Auto-fix**: deterministic and LLM-assisted remediation with unified diffs
+- **Agentic "AI team"**: role-based agents (Planner, Researcher, Engineer, Reviewer, Responsible-AI Officer) — see below
+- **Responsible AI governance**: PII redaction, prompt-injection guards, bias screening, and a hash-chained audit trail
+
+### Reporting & delivery
+- **Modern, responsive HTML report** (light/dark, inline SVG charts, search and filters) — see [HTML Report UI](#html-report-ui)
+- **PDF reports** with charts, code snippets, and an OWASP matrix
+- **Exporters**: SARIF, JSON, JUnit, HTML
+- **CI/CD generators**: GitHub Actions, GitLab CI, Jenkins, Azure Pipelines
 
 ## Agentic AI, LLM Providers & Responsible AI
 
@@ -61,6 +90,24 @@ Configuration:
 | `CODESHIELD_LLM_PROVIDER` | auto-detect | `claude_cli`, `anthropic_api`, `openai_api`, or `mock` |
 | `ANTHROPIC_API_KEY` | – | API key for `anthropic_api` |
 | `OPENAI_API_KEY` | – | API key for `openai_api` |
+
+## HTML Report UI
+
+Every scan exports to a **self-contained, fully responsive HTML report** (no external/CDN assets). It includes a risk gauge, severity distribution (inline SVG donut), most-affected files, a searchable and severity-filterable findings table with expandable details and fixes, an OWASP mapping, light/dark themes, and one-click **Save as PDF**.
+
+| Desktop | Dark theme | Mobile |
+| --- | --- | --- |
+| <img src="docs/images/report-desktop.png" alt="Desktop report" width="280"> | <img src="docs/images/report-dark.png" alt="Dark theme report" width="280"> | <img src="docs/images/report-mobile.png" alt="Mobile report" width="150"> |
+
+Generate one programmatically:
+
+```python
+from exporters.html_exporter import HTMLExporter
+
+HTMLExporter().export_to_file(scan_result, "report.html")
+```
+
+Or via the API: `GET /api/export/{scan_id}?format=html`.
 
 ## Architecture
 
