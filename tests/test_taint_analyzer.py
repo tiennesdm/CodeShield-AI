@@ -16,7 +16,6 @@ from scanner.tools.taint_analyzer import (
     ALL_SOURCE_PATTERNS,
     SANITIZER_PATTERNS,
     SINK_PATTERNS,
-    CallGraphBuilder,
     TaintAnalyzer,
     TaintFlow,
 )
