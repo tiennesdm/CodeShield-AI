@@ -404,6 +404,8 @@ class ContextAnalyzer:
             r"params\[", r"args\[",
             r"input\(", r"raw_input\(",
             r"sys\.argv",
+            r"\buser_input\b", r"\buser_data\b", r"\buserinput\b",
+            r"\buser_supplied\b", r"\buntrusted\b",
         ]
 
         for pattern in user_input_patterns:
@@ -434,21 +436,25 @@ class ContextAnalyzer:
             "is_in_dependency": False,
         }
 
-        if not source_path:
-            return result
+        content: Optional[str] = None
+        file_path = vuln.file_path
+        if source_path:
+            file_path = os.path.join(source_path, vuln.file_path)
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read()
+                except Exception:
+                    content = None
 
-        file_path = os.path.join(source_path, vuln.file_path)
-        if not os.path.exists(file_path):
-            return result
-
-        try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-        except Exception:
+        # Fall back to the finding's own code snippet when the file is not on disk
+        if not content:
+            content = vuln.code_snippet or ""
+        if not content:
             return result
 
         # Detect language from extension
-        language = self._detect_language(file_path)
+        language = self._detect_language(vuln.file_path)
 
         # Check if exposed endpoint
         result["is_exposed_endpoint"] = self.analyze_endpoint_exposure(
@@ -502,7 +508,7 @@ class BusinessImpactAnalyzer:
         path_lower = file_path.lower()
 
         # Check for production indicators in path
-        for pattern in PRODUCTION_INDICATIONS:
+        for pattern in PRODUCTION_INDICATORS:
             if re.search(pattern, path_lower):
                 return 0.8
 
@@ -732,10 +738,10 @@ class PrioritizationEngine:
 
         # 5. Final weighted score (0-100)
         final_score = (
-            base_score * 0.30
-            + context_score * 30 * 0.25
-            + threat_score * 30 * 0.25
-            + business_score * 30 * 0.20
+            base_score * 10 * 0.30      # base_score is 0-10 -> 0-100
+            + context_score * 100 * 0.25
+            + threat_score * 100 * 0.25
+            + business_score * 100 * 0.20
         )
 
         final_score = min(100.0, max(0.0, final_score))
