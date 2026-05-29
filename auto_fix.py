@@ -270,8 +270,8 @@ class AutoFixEngine:
         if fix_result and fix_result["fixed_code"]:
             return await self._build_fix_result(vuln, fix_result, original_code)
 
-        # Fall back to LLM-powered fix
-        if use_llm and self._openai_client:
+        # Fall back to LLM-powered fix (governed provider or legacy OpenAI)
+        if use_llm:
             try:
                 llm_fix = await self._llm_generate_fix(vuln, original_code)
                 if llm_fix and llm_fix.get("fixed_code"):
@@ -471,6 +471,46 @@ class AutoFixEngine:
 
         return None
 
+    async def _llm_complete(
+        self, prompt: str, system: str, max_tokens: int = 500
+    ) -> Optional[str]:
+        """
+        Get an LLM completion, preferring the governed LLM layer (any provider,
+        with PII redaction + audit) and falling back to the legacy OpenAI
+        client. Returns None when no LLM backend is available.
+        """
+        try:
+            from governance.assist import governed_complete
+            from governance.policy import DataSensitivity
+
+            governed = await governed_complete(
+                prompt,
+                system=system,
+                sensitivity=DataSensitivity.CONFIDENTIAL,
+                actor="auto_fix",
+                max_tokens=max_tokens,
+            )
+            if governed is not None:
+                return governed.content
+        except Exception as e:  # pragma: no cover - defensive
+            logger.debug("Governed auto-fix path unavailable: %s", e)
+
+        if self._openai_client:
+            try:
+                response = await self._openai_client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.2,
+                    max_tokens=max_tokens,
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                logger.debug("Legacy OpenAI auto-fix failed: %s", e)
+        return None
+
     async def _llm_generate_fix(
         self,
         vuln: Vulnerability,
@@ -486,9 +526,6 @@ class AutoFixEngine:
         Returns:
             Fix dict or None
         """
-        if not self._openai_client:
-            return None
-
         prompt = f"""Fix this security vulnerability:
 
 **Category**: {vuln.category}
@@ -501,26 +538,14 @@ class AutoFixEngine:
 ```
 
 Provide ONLY the fixed code in a code block. Do not explain."""
+        system = (
+            "You are a security engineer. Fix the given vulnerable code. "
+            "Return ONLY the fixed code inside a ``` code block. "
+            "Include comments explaining the security fix."
+        )
 
         try:
-            response = await self._openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a security engineer. Fix the given vulnerable code. "
-                            "Return ONLY the fixed code inside a ``` code block. "
-                            "Include comments explaining the security fix."
-                        ),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.2,
-                max_tokens=500,
-            )
-
-            content = response.choices[0].message.content
+            content = await self._llm_complete(prompt, system, max_tokens=500)
             if not content:
                 return None
 
