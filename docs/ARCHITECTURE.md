@@ -7,6 +7,8 @@ see [`RESPONSIBLE_AI.md`](./RESPONSIBLE_AI.md).
 
 ---
 
+![CodeShield AI architecture](images/architecture.png)
+
 ## 1. What it is
 
 CodeShield AI is a **FastAPI application-security platform**. You give it code
