@@ -79,6 +79,25 @@ class GitleaksParser:
     ) -> Optional[Vulnerability]:
         """Parse a single Gitleaks finding."""
         file_path = finding.get("File", "")
+        
+        # Ignore dependency lock files for secret leaks, as they frequently contain 
+        # false positive cryptographic integrity hashes (e.g. SHA-512) triggering entropy rules.
+        lower_path = file_path.lower()
+        lock_files = (
+            "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "npm-shrinkwrap.json", # Node.js
+            "poetry.lock", "pipfile.lock", "conda-lock.yml",                          # Python
+            "composer.lock",                                                          # PHP
+            "go.sum",                                                                 # Go
+            "cargo.lock",                                                             # Rust
+            "gemfile.lock",                                                           # Ruby
+            "packages.lock.json",                                                     # .NET
+            "gradle.lockfile",                                                        # Java/Gradle
+            "mix.lock",                                                               # Elixir
+            "pubspec.lock"                                                            # Dart/Flutter
+        )
+        if any(lock_file in lower_path for lock_file in lock_files):
+            return None
+
         line_number = finding.get("StartLine", 1)
         column = finding.get("StartColumn", 1)
         secret_type = finding.get("RuleID", finding.get("Type", "secret"))

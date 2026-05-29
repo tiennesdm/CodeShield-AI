@@ -52,7 +52,7 @@ def sample_vulnerability_sql() -> Vulnerability:
         cwe_name="SQL Injection",
         title="SQL Injection via f-string",
         description="User input used directly in SQL query",
-        code_snippet="cursor.execute(f'SELECT * FROM users WHERE id = {user_id}')",
+        code_snippet="user_id = request.args['id']\ncursor.execute(f'SELECT * FROM users WHERE id = {user_id}')",
         fix_suggestion="Use parameterized queries",
         tool_source="bandit",
         confidence="HIGH",

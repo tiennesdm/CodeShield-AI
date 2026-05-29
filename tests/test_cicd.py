@@ -269,7 +269,7 @@ class TestJenkinsPluginGenerator:
         generator = JenkinsPluginGenerator()
         config = JenkinsConfig()
 
-        pipeline = generator.generate_declarative_pipeline(config)
+        pipeline = generator.generate_shared_library_step(config)
 
         assert "RED" in pipeline or "\\u001B[31m" in pipeline
         assert "GREEN" in pipeline or "\\u001B[32m" in pipeline
