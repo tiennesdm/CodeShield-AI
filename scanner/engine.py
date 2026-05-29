@@ -111,15 +111,12 @@ class ScanEngine:
             result.total_files = len(all_files)
 
             if result.total_files == 0:
-                result.status = "completed"
-                result.progress = 100
                 result.end_time = datetime.now(timezone.utc)
                 if result.start_time:
                     result.scan_duration = int(
                         (result.end_time - result.start_time).total_seconds()
                     )
-                if db:
-                    await db.save_scan(result)
+                await self._update_progress(db, result, 100, "completed")
                 return result
 
             # Phase 2: Language detection
@@ -170,8 +167,6 @@ class ScanEngine:
             result.total_lines = self._count_total_lines(all_files)
 
             # Phase 6: Finalize
-            result.status = "completed"
-            result.progress = 100
             result.end_time = datetime.now(timezone.utc)
             if result.start_time:
                 result.scan_duration = int(
@@ -185,22 +180,19 @@ class ScanEngine:
                 result.risk_score,
             )
 
-            if db:
-                await db.save_scan(result)
+            await self._update_progress(db, result, 100, "completed")
 
             return result
 
         except Exception as e:
             logger.error("[%s] Scan failed: %s", scan_id, str(e), exc_info=True)
-            result.status = "failed"
             result.error_message = str(e)
             result.end_time = datetime.now(timezone.utc)
             if result.start_time:
                 result.scan_duration = int(
                     (result.end_time - result.start_time).total_seconds()
                 )
-            if db:
-                await db.save_scan(result)
+            await self._update_progress(db, result, result.progress, "failed")
             return result
 
     async def _update_progress(
