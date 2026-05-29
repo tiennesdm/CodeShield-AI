@@ -131,6 +131,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Optional rate limiting (no-op unless RATE_LIMIT_PER_MINUTE > 0)
+try:
+    from auth.api_key import RateLimitMiddleware
+
+    app.add_middleware(RateLimitMiddleware)
+except Exception as _rl_exc:  # pragma: no cover - defensive
+    import logging as _logging
+
+    _logging.getLogger(__name__).warning("Rate limiter not mounted: %s", _rl_exc)
+
 # Initialize components
 db = get_database()
 scan_engine = ScanEngine()

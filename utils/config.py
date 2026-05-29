@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     gitleaks_path: Optional[str] = None
     dependency_check_path: Optional[str] = None
 
+    # Security (opt-in; disabled by default)
+    require_api_key: bool = False
+    api_keys: str = ""  # comma-separated allow-list, e.g. "k1,k2"
+    rate_limit_per_minute: int = 0  # 0 = disabled
+
+    # Background jobs
+    job_concurrency: int = 2
+
     # Logging
     log_level: str = "INFO"
     log_format: str = "json"  # json or text
