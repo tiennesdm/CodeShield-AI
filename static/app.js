@@ -393,13 +393,93 @@ function getCheckedValues(name) {
 }
 
 // Status Polling Loop
+let scanWebSocket = null;
 let pollingInterval = null;
 
 function startPolling(scanId) {
   if (pollingInterval) clearInterval(pollingInterval);
+  if (scanWebSocket) {
+    try {
+      scanWebSocket.close();
+    } catch(e) {}
+  }
   
   updateProgress(0, 'Initializing...', 'running');
   
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/api/ws/scan/${scanId}`;
+  
+  showLog(`Connecting WebSocket for scan ID: ${scanId}...`);
+  
+  let wsConnected = false;
+  try {
+    scanWebSocket = new WebSocket(wsUrl);
+    
+    scanWebSocket.onopen = () => {
+      wsConnected = true;
+      showLog(`WebSocket connected for scan: ${scanId}`, 'success');
+    };
+    
+    scanWebSocket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'progress') {
+          const progress = data.progress || 0;
+          const status = data.status || 'running';
+          
+          let phase = 'Analyzing files...';
+          if (progress < 10) phase = 'Cloning / Extracting codebase...';
+          else if (progress < 30) phase = 'Detecting programming languages...';
+          else if (progress < 80) phase = 'Running security analyzers...';
+          else if (progress < 95) phase = 'Deduplicating vulnerability findings...';
+          else if (progress === 100) phase = 'Completed';
+          
+          if (status === 'failed') {
+            phase = 'Scan Failed';
+            showLog(`Error encountered: ${data.error || 'Unknown scanner error'}`, 'error');
+          } else {
+            showLog(`WebSocket Progress: ${progress}% - ${phase}`);
+          }
+          
+          updateProgress(progress, phase, status);
+          
+          if (status === 'completed') {
+            showLog('Scan completed successfully! Fetching final results...', 'success');
+            scanWebSocket.close();
+            setTimeout(() => loadScanResults(scanId), 1000);
+          } else if (status === 'failed') {
+            showLog('Scan failed to complete. Audit aborted.', 'error');
+            scanWebSocket.close();
+            alert(`Scan failed: ${data.error || 'Unknown database issue'}`);
+            setTimeout(() => showView('welcome'), 4000);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse WebSocket message:", e);
+      }
+    };
+    
+    scanWebSocket.onerror = (error) => {
+      showLog(`WebSocket connection error. Falling back to HTTP polling...`, 'warn');
+      startHttpPolling(scanId);
+    };
+    
+    scanWebSocket.onclose = () => {
+      if (!wsConnected) {
+        startHttpPolling(scanId);
+      } else {
+        showLog("WebSocket connection closed.");
+      }
+    };
+  } catch (err) {
+    showLog(`Failed to construct WebSocket. Falling back to HTTP polling...`, 'warn');
+    startHttpPolling(scanId);
+  }
+}
+
+function startHttpPolling(scanId) {
+  if (pollingInterval) clearInterval(pollingInterval);
+  showLog("Starting HTTP status polling...");
   pollingInterval = setInterval(async () => {
     try {
       const response = await fetch(`/api/scan/${scanId}/status`);
@@ -419,7 +499,7 @@ function startPolling(scanId) {
           phase = 'Scan Failed';
           showLog(`Error encountered: ${data.error || 'Unknown scanner error'}`, 'error');
         } else {
-          showLog(`Progress updated: ${progress}% - ${phase}`);
+          showLog(`HTTP Poll Progress: ${progress}% - ${phase}`);
         }
         
         updateProgress(progress, phase, status);
@@ -435,7 +515,6 @@ function startPolling(scanId) {
           setTimeout(() => showView('welcome'), 4000);
         }
       } else {
-        // Tolerating temporary backend network glitch/404s
         showLog('Polling backend... waiting for record to sync', 'warn');
       }
     } catch (error) {
@@ -799,7 +878,7 @@ function renderFindingsList(findings) {
             </div>
             <div class="fix-preview-area hidden" id="preview-area-${vuln.id}">
               <h5>Proposed Diff:</h5>
-              <pre class="diff-block" id="diff-block-${vuln.id}">Generating diff...</pre>
+              <div class="monaco-diff-container" id="diff-block-${vuln.id}" style="height: 350px; border: 1px solid var(--border-light); border-radius: 4px; overflow: hidden; margin-top: 8px;">Generating diff...</div>
             </div>
           </div>
 
@@ -856,19 +935,56 @@ async function previewAutoFix(vulnId, event) {
         statusBadge.className = 'fix-status-badge ready';
         statusBadge.textContent = 'Diff Ready';
         
-        // Formatter for diff block to color additions/deletions
-        const diffLines = data.diff.split('\n');
-        let diffHtml = '';
-        diffLines.forEach(line => {
-          if (line.startsWith('+') && !line.startsWith('+++')) {
-            diffHtml += `<span class="diff-added">${escapeHTML(line)}</span>`;
-          } else if (line.startsWith('-') && !line.startsWith('---')) {
-            diffHtml += `<span class="diff-removed">${escapeHTML(line)}</span>`;
-          } else {
-            diffHtml += `<span>${escapeHTML(line)}</span>\n`;
-          }
-        });
-        diffBlock.innerHTML = diffHtml;
+        diffBlock.innerHTML = '';
+        diffBlock.textContent = '';
+        
+        if (data.original_code !== undefined && data.original_code !== null && data.fixed_code !== undefined && data.fixed_code !== null) {
+          require(['vs/editor/editor.main'], function () {
+            let language = 'javascript';
+            const vuln = currentState.vulnerabilities.find(v => v.id === vulnId);
+            if (vuln && vuln.file_path) {
+              const ext = vuln.file_path.split('.').pop().toLowerCase();
+              if (ext === 'py') language = 'python';
+              else if (ext === 'js') language = 'javascript';
+              else if (ext === 'ts') language = 'typescript';
+              else if (ext === 'json') language = 'json';
+              else if (ext === 'html') language = 'html';
+              else if (ext === 'css') language = 'css';
+              else if (ext === 'go') language = 'go';
+              else if (ext === 'java') language = 'java';
+              else if (ext === 'sh') language = 'shell';
+            }
+            
+            const diffEditor = monaco.editor.createDiffEditor(diffBlock, {
+              theme: 'vs-dark',
+              readOnly: true,
+              automaticLayout: true,
+              renderSideBySide: true
+            });
+            
+            const originalModel = monaco.editor.createModel(data.original_code, language);
+            const modifiedModel = monaco.editor.createModel(data.fixed_code, language);
+            
+            diffEditor.setModel({
+              original: originalModel,
+              modified: modifiedModel
+            });
+          });
+        } else {
+          // Fallback to text diff display if raw code blocks aren't available
+          const diffLines = data.diff.split('\n');
+          let diffHtml = '';
+          diffLines.forEach(line => {
+            if (line.startsWith('+') && !line.startsWith('+++')) {
+              diffHtml += `<div class="diff-added" style="color: var(--color-low); background: rgba(16, 185, 129, 0.1); padding: 2px 4px; font-family: monospace;">${escapeHTML(line)}</div>`;
+            } else if (line.startsWith('-') && !line.startsWith('---')) {
+              diffHtml += `<div class="diff-removed" style="color: var(--color-critical); background: rgba(239, 68, 68, 0.1); padding: 2px 4px; font-family: monospace;">${escapeHTML(line)}</div>`;
+            } else {
+              diffHtml += `<div style="padding: 2px 4px; font-family: monospace; white-space: pre-wrap;">${escapeHTML(line)}</div>`;
+            }
+          });
+          diffBlock.innerHTML = diffHtml;
+        }
       } else {
         statusBadge.className = 'fix-status-badge failed';
         statusBadge.textContent = 'Failed';

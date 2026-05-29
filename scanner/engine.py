@@ -216,6 +216,23 @@ class ScanEngine:
         if db:
             await db.save_scan(result)
 
+        try:
+            from utils.ws_manager import ws_manager
+            import asyncio
+            asyncio.create_task(
+                ws_manager.broadcast_to_scan(
+                    result.scan_id,
+                    {
+                        "type": "progress",
+                        "progress": progress,
+                        "status": status,
+                        "scan_id": result.scan_id,
+                    }
+                )
+            )
+        except Exception:
+            pass
+
     def _select_tools(
         self, languages: List[str], config: ScanConfig
     ) -> List[str]:
