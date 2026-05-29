@@ -854,7 +854,7 @@ class CustomAIScanner:
                     if isinstance(target, ast.Name):
                         name_lower = target.id.lower()
                         if any(keyword in name_lower for keyword in ["password", "secret", "api_key", "token"]):
-                            if isinstance(node.value, (ast.Constant, ast.Str)):
+                            if isinstance(node.value, ast.Constant):
                                 if node.lineno:
                                     value = ""
                                     if isinstance(node.value, ast.Constant):
