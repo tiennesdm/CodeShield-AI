@@ -81,6 +81,9 @@ USER_INPUT_SOURCES = [
     r"input\(", r"raw_input\(",
     r"sys\.argv", r"os\.environ",
     r"flask\.request", r"django\.http",
+    # Common user-controlled variable names
+    r"\buser_id\b", r"\buser_input\b", r"\buser_data\b",
+    r"\buser_supplied\b", r"\buntrusted\b", r"\brequest_data\b",
 ]
 
 # OWASP LLM Top 10 categories mapping
