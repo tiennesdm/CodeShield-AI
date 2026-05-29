@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from database.json_db import JSONDatabase
 from database import get_database
@@ -140,6 +141,15 @@ except Exception as _rl_exc:  # pragma: no cover - defensive
     import logging as _logging
 
     _logging.getLogger(__name__).warning("Rate limiter not mounted: %s", _rl_exc)
+
+# Serve static files and main dashboard route
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/")
+async def read_index():
+    """Serve the main dashboard UI."""
+    return FileResponse("static/index.html")
 
 # Initialize components
 db = get_database()

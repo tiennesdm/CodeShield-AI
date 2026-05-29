@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     app_name: str = "CodeShield AI"
     app_version: str = "1.0.0"
     debug: bool = False
+    api_url: str = "https://api.codeshield.ai"
 
     # Server
     host: str = "0.0.0.0"

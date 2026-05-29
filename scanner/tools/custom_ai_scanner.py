@@ -302,9 +302,9 @@ PAYMENT_PATTERNS = [
 
 # Cryptocurrency Patterns (20+)
 CRYPTO_PATTERNS = [
-    (r"(5[HJK][1-9A-Za-z][^OIl]{48})", "Bitcoin Private Key (WIF uncompressed)", "CWE-798", "CRITICAL"),
-    (r"(K[1-9A-Za-z][^OIl]{50})", "Bitcoin Private Key (WIF compressed)", "CWE-798", "CRITICAL"),
-    (r"(L[1-9A-Za-z][^OIl]{50})", "Bitcoin Private Key (WIF compressed variant)", "CWE-798", "CRITICAL"),
+    (r"\b(5[HJK][1-9A-HJ-NP-Za-km-z]{49})\b", "Bitcoin Private Key (WIF uncompressed)", "CWE-798", "CRITICAL"),
+    (r"\b(K[1-9A-HJ-NP-Za-km-z]{51})\b", "Bitcoin Private Key (WIF compressed)", "CWE-798", "CRITICAL"),
+    (r"\b(L[1-9A-HJ-NP-Za-km-z]{51})\b", "Bitcoin Private Key (WIF compressed variant)", "CWE-798", "CRITICAL"),
     (r"(0x[a-fA-F0-9]{64})", "Ethereum Private Key", "CWE-798", "CRITICAL"),
     (r"(0x[a-fA-F0-9]{40})", "Ethereum Address", "CWE-200", "LOW"),
     (r"([13][a-km-zA-HJ-NP-Z1-9]{25,34})", "Bitcoin Address", "CWE-200", "LOW"),
