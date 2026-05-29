@@ -25,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from database.json_db import JSONDatabase
+from database import get_database
 from models.vulnerability import (
     ScanComparison,
     ScanConfig,
@@ -131,7 +132,7 @@ app.add_middleware(
 )
 
 # Initialize components
-db = JSONDatabase()
+db = get_database()
 scan_engine = ScanEngine()
 zip_handler = ZipHandler()
 github_handler = GitHubHandler()

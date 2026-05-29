@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     data_dir: Path = Field(default=Path("./data"))
     temp_dir: Path = Field(default=Path("./tmp"))
     max_upload_size_mb: int = 100
+    # Datastore backend: "json" (file-per-scan) or "sqlite" (single DB file)
+    db_backend: str = "json"
+    db_path: Optional[str] = None  # defaults to <data_dir>/codeshield.db for sqlite
 
     # Scanning
     default_scan_timeout: int = 600  # seconds
