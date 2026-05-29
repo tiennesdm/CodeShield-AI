@@ -70,7 +70,7 @@ class TestZAPScanner:
 
         zap = ZAPScanner()
         with patch.object(zap, "_zap_available", False):
-            findings = asyncio.get_event_loop().run_until_complete(
+            findings = asyncio.run(
                 zap.run_scan("http://example.com")
             )
             assert len(findings) == 0
@@ -109,7 +109,7 @@ class TestURLSecurityScanner:
         mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
 
         import asyncio
-        findings = asyncio.get_event_loop().run_until_complete(
+        findings = asyncio.run(
             url_scanner.scan_url("https://example.com")
         )
 
@@ -138,7 +138,7 @@ class TestURLSecurityScanner:
         mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
 
         import asyncio
-        findings = asyncio.get_event_loop().run_until_complete(
+        findings = asyncio.run(
             url_scanner.scan_url("https://example.com")
         )
 
@@ -163,7 +163,7 @@ class TestURLSecurityScanner:
         mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
 
         import asyncio
-        findings = asyncio.get_event_loop().run_until_complete(
+        findings = asyncio.run(
             url_scanner.scan_url("https://example.com")
         )
 
@@ -184,7 +184,7 @@ class TestURLSecurityScanner:
         mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
 
         import asyncio
-        findings = asyncio.get_event_loop().run_until_complete(
+        findings = asyncio.run(
             url_scanner.scan_url("https://example.com")
         )
 
@@ -207,7 +207,7 @@ class TestURLSecurityScanner:
         mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
 
         import asyncio
-        findings = asyncio.get_event_loop().run_until_complete(
+        findings = asyncio.run(
             url_scanner.scan_url("https://example.com")
         )
 
@@ -226,7 +226,7 @@ class TestURLSecurityScanner:
             mock.return_value.__exit__ = MagicMock(return_value=False)
 
             import asyncio
-            findings = asyncio.get_event_loop().run_until_complete(
+            findings = asyncio.run(
                 url_scanner.scan_url("http://example.com")
             )
 
@@ -277,7 +277,7 @@ class TestURLSecurityScanner:
         """Test error handling for unreachable URLs."""
         with patch("scanner.tools.dast_scanner.urllib.request.urlopen", side_effect=Exception("Connection refused")):
             import asyncio
-            findings = asyncio.get_event_loop().run_until_complete(
+            findings = asyncio.run(
                 url_scanner.scan_url("https://nonexistent.invalid")
             )
 
@@ -316,7 +316,7 @@ class TestDASTScanner:
             ),
         ]
 
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             dast_scanner.scan("https://example.com", "test-d1")
         )
 
