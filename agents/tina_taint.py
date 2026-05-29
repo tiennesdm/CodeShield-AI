@@ -74,7 +74,7 @@ class TinaTaintAgent(BaseSecurityAgent):
             t0 = time.time() * 1000
             try:
                 logger.info("[%s] Running Python taint analysis", context.scan_id)
-                findings = self._taint.analyze(context.source_path, context.scan_id)
+                findings = await self._taint.analyze(context.source_path, context.scan_id)
                 elapsed = int(time.time() * 1000 - t0)
                 all_findings.extend(findings)
 

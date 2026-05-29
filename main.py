@@ -130,19 +130,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Agentic AI Team + Responsible AI Governance router.
-# Imported defensively so the core API still boots if these modules change.
-try:
-    from ai_team.api import router as ai_team_router
-
-    app.include_router(ai_team_router)
-except Exception as _ai_team_exc:  # pragma: no cover - defensive wiring
-    import logging as _logging
-
-    _logging.getLogger(__name__).warning(
-        "AI Team / governance router not mounted: %s", _ai_team_exc
-    )
-
 # Initialize components
 db = JSONDatabase()
 scan_engine = ScanEngine()
@@ -2361,7 +2348,7 @@ async def get_taint_analysis_results(
         raise HTTPException(status_code=400, detail="Source code not available for taint analysis")
 
     try:
-        taint_vulns = taint_analyzer.analyze(source_path, scan_id)
+        taint_vulns = await taint_analyzer.analyze(source_path, scan_id)
 
         # Merge with existing vulnerabilities
         if taint_vulns:

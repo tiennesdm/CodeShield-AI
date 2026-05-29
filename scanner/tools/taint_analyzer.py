@@ -386,7 +386,21 @@ to dangerous sinks, detecting various injection vulnerabilities.
         self._sink_patterns = SINK_PATTERNS
         self._sanitizer_patterns = SANITIZER_PATTERNS
 
-    def analyze(self, source_path: str, scan_id: str) -> List[Vulnerability]:
+    # Maps SINK_PATTERNS keys to sanitizer categories in SANITIZER_PATTERNS.
+    _SANITIZER_CATEGORY_MAP: Dict[str, str] = {
+        "sql_injection": "sql",
+        "command_injection": "command",
+        "code_injection": "command",
+        "xss": "xss",
+        "path_traversal": "path",
+        "ssrf": "ssrf",
+    }
+
+    async def scan(self, source_path: str, scan_id: str) -> List[Vulnerability]:
+        """Async alias for :meth:`analyze` (used by the orchestrator)."""
+        return await self.analyze(source_path, scan_id)
+
+    async def analyze(self, source_path: str, scan_id: str) -> List[Vulnerability]:
         """
         Run taint analysis on all Python files in source path.
 
@@ -450,7 +464,32 @@ to dangerous sinks, detecting various injection vulnerabilities.
     ) -> None:
         """Analyze a function body for taint flows."""
         func_name = func.name
-        self._analyze_function_body(func.body, file_path, content, lines, func_name)
+
+        # Seed function parameters as potential taint sources (a standard
+        # taint-analysis assumption: parameters may carry untrusted input).
+        initial_tainted: Dict[str, int] = {}
+        func_line = getattr(func, "lineno", 1)
+        for arg_name in self._iter_param_names(func):
+            if arg_name in ("self", "cls"):
+                continue
+            initial_tainted[arg_name] = func_line
+
+        self._analyze_function_body(
+            func.body, file_path, content, lines, func_name, initial_tainted
+        )
+
+    @staticmethod
+    def _iter_param_names(func: ast.FunctionDef) -> List[str]:
+        """Collect all parameter names of a function definition."""
+        args = func.args
+        names: List[str] = []
+        for collection in (getattr(args, "posonlyargs", []), args.args, args.kwonlyargs):
+            names.extend(a.arg for a in collection)
+        if args.vararg:
+            names.append(args.vararg.arg)
+        if args.kwarg:
+            names.append(args.kwarg.arg)
+        return names
 
     def _analyze_function_body(
         self,
@@ -459,10 +498,11 @@ to dangerous sinks, detecting various injection vulnerabilities.
         content: str,
         lines: List[str],
         func_name: str,
+        initial_tainted: Optional[Dict[str, int]] = None,
     ) -> None:
         """Analyze function body statements for taint flows."""
         # Track tainted variables in this scope
-        tainted_vars: Dict[str, int] = {}  # var_name -> source_line
+        tainted_vars: Dict[str, int] = dict(initial_tainted or {})  # var_name -> source_line
 
         # Collect all statements recursively
         all_stmts = self._collect_statements(body)
@@ -661,10 +701,13 @@ to dangerous sinks, detecting various injection vulnerabilities.
                 if not call_name:
                     continue
 
-                # Check if this call matches a sink pattern
+                # Check if this call matches a sink pattern. Sink patterns
+                # end with ``\s*\(`` but call_name has no parenthesis, so
+                # match against ``call_name + "("``.
+                call_probe = call_name + "("
                 is_sink = False
                 for pattern in sink_patterns:
-                    if re.search(pattern, call_name):
+                    if re.search(pattern, call_probe):
                         is_sink = True
                         break
 
@@ -732,24 +775,49 @@ to dangerous sinks, detecting various injection vulnerabilities.
         Returns:
             Tuple of (is_sanitized, sanitizer_name)
         """
-        # Get the relevant statement text
-        stmt_text = self._get_node_text(stmt, content)
+        # Get the relevant statement text. When called without an AST node
+        # (e.g. from unit tests), the caller passes the statement text directly
+        # as ``content``.
+        if stmt is None:
+            stmt_text = content
+        else:
+            stmt_text = self._get_node_text(stmt, content) or content
         if not stmt_text:
             return False, ""
 
-        # Check sink-specific sanitizers
-        sink_sanitizers = self._sanitizer_patterns.get(sink_type, [])
-        general_sanitizers = self._sanitizer_patterns.get("general", [])
-        all_sanitizers = sink_sanitizers + general_sanitizers
+        # Map full sink-type names (SINK_PATTERNS keys) to sanitizer categories.
+        category = self._SANITIZER_CATEGORY_MAP.get(sink_type, sink_type)
 
-        for pattern in all_sanitizers:
+        # SQL needs special handling: a bare ``%s``/``?`` placeholder only
+        # indicates parameterization when values are passed separately, NOT when
+        # string formatting (``"..." % x``, ``.format()``, concatenation,
+        # f-strings) is used to build the query.
+        if category == "sql":
+            has_placeholder = bool(
+                re.search(r"%s|%d|\?|:\w+|%\(\w+\)s", stmt_text)
+                or re.search(r"parameteriz|bindparam|text\s*\(", stmt_text, re.IGNORECASE)
+            )
+            uses_string_format = bool(
+                re.search(r"['\"]\s*%\s+\w", stmt_text)  # "..." % var
+                or re.search(r"\.format\s*\(", stmt_text)
+                or "+" in stmt_text
+                or 'f"' in stmt_text
+                or "f'" in stmt_text
+            )
+            if has_placeholder and not uses_string_format:
+                return True, "parameterized_query"
+            # Fall through to general sanitizers (validate/int/etc.).
+            for pattern in self._sanitizer_patterns.get("general", []):
+                if re.search(pattern, stmt_text, re.IGNORECASE):
+                    return True, pattern
+            return False, ""
+
+        # Check sink-specific sanitizers + general sanitizers.
+        sink_sanitizers = self._sanitizer_patterns.get(category, [])
+        general_sanitizers = self._sanitizer_patterns.get("general", [])
+        for pattern in sink_sanitizers + general_sanitizers:
             if re.search(pattern, stmt_text, re.IGNORECASE):
                 return True, pattern
-
-        # Check for f-string sanitization (e.g., f"...{sanitized}...")
-        if "f\"" in stmt_text or "f'" in stmt_text:
-            # f-strings in sinks are often vulnerable but check for explicit sanitization
-            pass
 
         return False, ""
 
