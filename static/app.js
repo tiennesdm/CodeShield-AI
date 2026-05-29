@@ -65,49 +65,96 @@ const docElements = {
 
 // Initialize Application
 document.addEventListener('DOMContentLoaded', () => {
-  feather.replace();
-  checkHealth();
-  loadHistory();
-  setupDragAndDrop();
+  try {
+    if (window.feather) feather.replace();
+  } catch (e) {
+    console.error("Feather error:", e);
+  }
+  
+  try {
+    checkHealth();
+  } catch (e) {
+    console.error("Health check error:", e);
+  }
+  
+  try {
+    loadHistory();
+  } catch (e) {
+    console.error("Load history error:", e);
+  }
+  
+  try {
+    setupDragAndDrop();
+  } catch (e) {
+    console.error("Drag and drop setup error:", e);
+  }
   
   // Keep health check running every 30 seconds
-  setInterval(checkHealth, 30000);
+  setInterval(() => {
+    try {
+      checkHealth();
+    } catch (e) {
+      console.error("Periodic health check error:", e);
+    }
+  }, 30000);
   
   // Sidebar toggle
-  docElements.toggleSidebarBtn.addEventListener('click', () => {
-    docElements.sidebar.classList.toggle('collapsed');
-  });
+  try {
+    if (docElements.toggleSidebarBtn) {
+      docElements.toggleSidebarBtn.addEventListener('click', () => {
+        if (docElements.sidebar) docElements.sidebar.classList.toggle('collapsed');
+      });
+    }
+  } catch (e) {
+    console.error("Sidebar toggle error:", e);
+  }
 
   // Theme Toggle Logic
-  const themeToggleBtn = document.getElementById('theme-toggle-btn');
-  const currentTheme = localStorage.getItem('theme') || 'dark';
-  document.documentElement.setAttribute('data-theme', currentTheme);
-  updateThemeIcon(currentTheme);
+  try {
+    const themeToggleBtn = document.getElementById('theme-toggle-btn');
+    if (themeToggleBtn) {
+      const currentTheme = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', currentTheme);
+      updateThemeIcon(currentTheme);
 
-  themeToggleBtn.addEventListener('click', () => {
-    const activeTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', activeTheme);
-    localStorage.setItem('theme', activeTheme);
-    updateThemeIcon(activeTheme);
-  });
+      themeToggleBtn.addEventListener('click', () => {
+        const activeTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', activeTheme);
+        localStorage.setItem('theme', activeTheme);
+        updateThemeIcon(activeTheme);
+      });
+    }
+  } catch (e) {
+    console.error("Theme toggle error:", e);
+  }
 
   function updateThemeIcon(theme) {
+    const themeToggleBtn = document.getElementById('theme-toggle-btn');
+    if (!themeToggleBtn) return;
     const icon = themeToggleBtn.querySelector('i');
+    if (!icon) return;
     if (theme === 'dark') {
       icon.setAttribute('data-feather', 'sun');
     } else {
       icon.setAttribute('data-feather', 'moon');
     }
-    if (window.feather) feather.replace();
+    if (window.feather) {
+      try {
+        feather.replace();
+      } catch (e) {}
+    }
   }
 
   // Code Editor Overlay Listeners
   const closeBtn = document.getElementById('editor-close-btn');
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
-      document.getElementById('editor-overlay').classList.add('hidden');
+      const overlay = document.getElementById('editor-overlay');
+      if (overlay) overlay.classList.add('hidden');
       if (monacoEditorInstance) {
-        monacoEditorInstance.dispose();
+        try {
+          monacoEditorInstance.dispose();
+        } catch (e) {}
         monacoEditorInstance = null;
       }
     });
@@ -179,7 +226,11 @@ function toggleAdvancedSettings(type) {
   } else {
     icon.setAttribute('data-feather', 'chevron-up');
   }
-  feather.replace();
+  if (window.feather) {
+    try {
+      feather.replace();
+    } catch (e) {}
+  }
 }
 
 // Drag & Drop Configuration
@@ -796,7 +847,11 @@ function renderAgentSwarm(percent, scanStatus) {
   });
   
   container.innerHTML = html;
-  feather.replace();
+  if (window.feather) {
+    try {
+      feather.replace();
+    } catch (e) {}
+  }
 }
 
 function updateConceptHighlights(percent, scanStatus) {
@@ -924,7 +979,11 @@ function renderFindingsList(findings) {
         <p>No vulnerabilities found matching current filters.</p>
       </div>
     `;
-    feather.replace();
+    if (window.feather) {
+      try {
+        feather.replace();
+      } catch (e) {}
+    }
     return;
   }
   
@@ -1043,7 +1102,11 @@ function renderFindingsList(findings) {
   });
   
   docElements.findingsList.innerHTML = html;
-  feather.replace();
+  if (window.feather) {
+    try {
+      feather.replace();
+    } catch (e) {}
+  }
 }
 
 function toggleFinding(vulnId) {
