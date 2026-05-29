@@ -40,6 +40,9 @@ AI_CODE_SIGNATURES = [
     # Generic function docstrings
     (r'"""\s*\n\s*(?:This (?:function|method|class)|A (?:function|method|class) that)',
      "Generic AI docstring pattern"),
+    # Generic docstring summary line (AI often writes "A function that ...")
+    (r"^\s*(?:This|A|An)\s+(?:function|method|class|module|script)\s+(?:that\s+)?(?:is\s+used\s+to|handles?|processes?|manages?|takes|accepts|returns|will)\b",
+     "Generic AI docstring summary line"),
     # TODO comments left by AI
     (r"#\s*TODO:\s*(?:Add (?:error|validation|authentication|authorization)|Implement)",
      "AI-generated TODO placeholder"),
@@ -192,6 +195,9 @@ HARDCODED_LLM_KEY_PATTERNS = [
      "Hardcoded Mistral API key"),
     (r"(?i)(groq[_-]?api[_-]?key\s*[:=]\s*['\"]gsk_[a-zA-Z0-9]{20,}['\"])",
      "Hardcoded Groq API key"),
+    # Generic OpenAI-style key assigned to any *api*key/secret/token variable
+    (r"(?i)(?:api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token)\s*[:=]\s*['\"]sk-[a-zA-Z0-9]{16,}['\"]",
+     "Hardcoded OpenAI-style API key"),
 ]
 
 # Missing input validation before LLM calls
@@ -225,7 +231,7 @@ LLM_OUTPUT_SANITIZATION_PATTERNS = [
      "LLM output used in system command - RCE risk"),
     # LLM output written to file without validation
     (r"(?i)(open\s*\(\s*(?:response|completion|result|output)\s*,\s*['\"]w)"
-     r"|(write|writelines)\s*\(\s*(?:response|completion|result|output)\s*\))",
+     r"|(write|writelines)\s*\(\s*(?:response|completion|result|output)\s*\)",
      "LLM output written to file without validation"),
 ]
 
@@ -239,7 +245,7 @@ RAG_PROMPT_INJECTION_PATTERNS = [
      r"(?!.*(?:sanitize|escape|filter))",
      "Retrieved documents injected into prompt without sanitization"),
     # No delimiter between system prompt and user content
-    (r"(?i)(prompt\s*=\s*['\"].*System:.*User:.*)"
+    (r"(?i)(prompt\s*=\s*f?['\"].*System:.*User:.*)"
      r"(?!.*(?:delimiter|separator|<\|))",
      "No clear delimiter between system prompt and user content"),
     # Missing instruction boundaries
@@ -312,6 +318,9 @@ OWASP_LLM_PATTERNS: Dict[str, List[Tuple[str, str]]] = {
          "LLM06: Sensitive information may be disclosed"),
         (r"(?i)(response.*include.*system.*prompt|reveal.*instructions.*to.*user)",
          "LLM06: System prompt/instructions may leak to user"),
+        (r"(?i)((?:return|response|jsonify|render|send)\b.*traceback\.format_exc\s*\(\s*\))"
+         r"|(traceback\.format_exc\s*\(\s*\).*(?:return|response|jsonify))",
+         "LLM06: Exception traceback returned to client"),
     ],
     "LLM07": [  # Insecure Plugin Design
         (r"(?i)(plugin.*exec\s*\(|tool.*eval\s*\(|extension.*system.*call)"
@@ -336,6 +345,10 @@ OWASP_LLM_PATTERNS: Dict[str, List[Tuple[str, str]]] = {
         (r"(?i)(no.*human.*review|fully.*automated.*llm|blind.*trust)"
          r"|(skip.*verification.*llm.*output)",
          "LLM09: No human review of LLM outputs for critical operations"),
+        (r"(?i)(?:auth\w*|authz|decision|verdict|access|permission|approv\w*)\s*=\s*[^=\n]*"
+         r"\b(?:llm|model|gpt|openai|claude|chat|completion)\w*\.\s*"
+         r"(?:evaluate|decide|predict|classify|complete|generate|judge|assess)",
+         "LLM09: Security/auth decision delegated to LLM output"),
     ],
     "LLM10": [  # Model Theft
         (r"(?i)(model.*download.*endpoint|/download.*model|export.*weights)"
