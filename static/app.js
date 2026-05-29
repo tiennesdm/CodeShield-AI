@@ -500,7 +500,9 @@ function startPolling(scanId) {
     scanWebSocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'progress') {
+        if (data.type === 'log') {
+          showLog(data.message, data.level || 'info');
+        } else if (data.type === 'progress') {
           const progress = data.progress || 0;
           const status = data.status || 'running';
           

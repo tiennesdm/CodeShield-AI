@@ -574,10 +574,29 @@ class TriagerAgent:
             return finding
 
         try:
+            from utils.ws_manager import ws_manager
+            import asyncio
+            scan_id = finding.vulnerability.scan_id
+            file_name = os.path.basename(finding.vulnerability.file_path)
+            asyncio.create_task(
+                ws_manager.broadcast_to_scan(
+                    scan_id,
+                    {
+                        "type": "log",
+                        "message": f"Triaging vulnerability in {file_name} at line {finding.vulnerability.line_number}...",
+                        "level": "info"
+                    }
+                )
+            )
+        except Exception:
+            pass
+
+        try:
             triaged = await self.ai_triage_engine.triage_vulnerabilities(
                 [finding.vulnerability],
                 source_path=source_path,
                 use_llm=True,
+                emit_ws_logs=False,
             )
             if triaged and len(triaged) > 0:
                 result = triaged[0]
@@ -601,6 +620,25 @@ class TriagerAgent:
                         result.code_snippet or ""
                     ),
                 }
+
+            try:
+                from utils.ws_manager import ws_manager
+                import asyncio
+                scan_id = finding.vulnerability.scan_id
+                file_name = os.path.basename(finding.vulnerability.file_path)
+                status_text = "LIKELY FALSE POSITIVE" if finding.is_false_positive else "CONFIRMED"
+                asyncio.create_task(
+                    ws_manager.broadcast_to_scan(
+                        scan_id,
+                        {
+                            "type": "log",
+                            "message": f"Completed triage for {file_name} - Status: {status_text}",
+                            "level": "success" if not finding.is_false_positive else "warn"
+                        }
+                    )
+                )
+            except Exception:
+                pass
 
         except Exception as e:
             logger.warning("AI triage failed for %s: %s", finding.vulnerability.id, e)
