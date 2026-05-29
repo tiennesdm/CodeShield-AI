@@ -6,6 +6,7 @@ Terraform scanning, Helm chart scanning, and policy engine.
 """
 
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -60,7 +61,7 @@ COPY . /app
 CMD ["python", "app.py"]
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-1")
         )
 
@@ -76,7 +77,7 @@ COPY . /app
 CMD ["python", "app.py"]
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-2")
         )
 
@@ -93,7 +94,7 @@ USER appuser
 CMD ["python", "app.py"]
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-3")
         )
 
@@ -111,7 +112,7 @@ HEALTHCHECK CMD curl -f http://localhost/ || exit 1
 CMD ["python", "app.py"]
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-4")
         )
 
@@ -131,7 +132,7 @@ HEALTHCHECK CMD curl -f http://localhost/ || exit 1
 CMD ["python", "app.py"]
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-5")
         )
 
@@ -149,7 +150,7 @@ HEALTHCHECK CMD curl -f http://localhost/ || exit 1
 CMD ["python", "app.py"]
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-6")
         )
 
@@ -171,7 +172,7 @@ EXPOSE 8080
 CMD ["python", "app.py"]
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-7")
         )
 
@@ -196,7 +197,7 @@ HEALTHCHECK CMD curl -f http://localhost/ || exit 1
 CMD ["python", "app.py"]
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-8")
         )
 
@@ -229,7 +230,7 @@ spec:
           privileged: true
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-k1")
         )
 
@@ -251,7 +252,7 @@ spec:
     image: myapp:1.0
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-k2")
         )
 
@@ -273,7 +274,7 @@ spec:
         image: myapp:1.0
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-k3")
         )
 
@@ -298,7 +299,7 @@ spec:
           readOnlyRootFilesystem: true
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-k4")
         )
 
@@ -325,7 +326,7 @@ spec:
           value: "sk-test-key-12345"
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-k5")
         )
 
@@ -345,7 +346,7 @@ rules:
   verbs: ["*"]
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-k6")
         )
 
@@ -369,7 +370,7 @@ spec:
         image: myapp:1.0
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-k7")
         )
 
@@ -393,7 +394,7 @@ spec:
           runAsNonRoot: true
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-k8")
         )
 
@@ -417,7 +418,7 @@ resource "aws_s3_bucket" "public_bucket" {
 }
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-t1")
         )
 
@@ -439,7 +440,7 @@ resource "aws_security_group" "open_sg" {
 }
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-t2")
         )
 
@@ -456,7 +457,7 @@ resource "aws_db_instance" "database" {
 }
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-t3")
         )
 
@@ -481,7 +482,7 @@ image:
 replicaCount: 1
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-h1")
         )
 
@@ -499,7 +500,7 @@ securityContext:
   runAsNonRoot: true
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-h2")
         )
 
@@ -516,7 +517,7 @@ securityContext:
   runAsNonRoot: true
 """)
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             scanner.scan(temp_dir, "test-scan-h3")
         )
 

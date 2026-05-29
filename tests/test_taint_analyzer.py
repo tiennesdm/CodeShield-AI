@@ -16,7 +16,6 @@ from scanner.tools.taint_analyzer import (
     ALL_SOURCE_PATTERNS,
     SANITIZER_PATTERNS,
     SINK_PATTERNS,
-    CallGraphBuilder,
     TaintAnalyzer,
     TaintFlow,
 )
@@ -63,7 +62,7 @@ def get_user(user_id):
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-t1")
         )
 
@@ -85,7 +84,7 @@ def search():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-t2")
         )
 
@@ -100,7 +99,7 @@ def get_data(table_name):
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-t3")
         )
 
@@ -115,7 +114,7 @@ def query_user(username):
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-t4")
         )
 
@@ -131,7 +130,7 @@ def find_user(email):
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-t5")
         )
 
@@ -156,7 +155,7 @@ def process_file(filename):
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-c1")
         )
 
@@ -174,7 +173,7 @@ def run_command(cmd):
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-c2")
         )
 
@@ -195,7 +194,7 @@ def run():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-c3")
         )
 
@@ -221,7 +220,7 @@ def hello():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-x1")
         )
 
@@ -240,7 +239,7 @@ def echo():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-x2")
         )
 
@@ -264,7 +263,7 @@ def read_file(filename):
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-p1")
         )
 
@@ -285,7 +284,7 @@ def download():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-p2")
         )
 
@@ -314,7 +313,7 @@ def fetch():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-s1")
         )
 
@@ -334,7 +333,7 @@ def fetch_url():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-s2")
         )
 
@@ -361,7 +360,7 @@ def calculate():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-e1")
         )
 
@@ -380,7 +379,7 @@ def execute():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-e2")
         )
 
@@ -448,7 +447,7 @@ def search():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-df1")
         )
 
@@ -469,7 +468,7 @@ def process():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-df2")
         )
 
@@ -489,7 +488,7 @@ def batch_query():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-df3")
         )
 
@@ -575,7 +574,7 @@ class TestUtilityMethods:
     def test_empty_directory(self, analyzer, temp_dir):
         """Test analysis of empty directory."""
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-empty")
         )
         assert len(vulns) == 0
@@ -592,7 +591,7 @@ def search():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-summary")
         )
 
@@ -612,7 +611,7 @@ def helper():
 """)
 
         import asyncio
-        vulns = asyncio.get_event_loop().run_until_complete(
+        vulns = asyncio.run(
             analyzer.analyze(temp_dir, "test-safe")
         )
 

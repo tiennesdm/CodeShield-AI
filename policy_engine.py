@@ -391,6 +391,7 @@ class PolicyEngine:
                     conditions=[
                         PolicyRuleCondition(
                             type="scan_completed",
+                            inverted=True,
                         )
                     ],
                     action=PolicyAction.BLOCK,
@@ -547,6 +548,10 @@ class PolicyEngine:
         """
         if policy_id not in self.policies:
             return False
+        # Built-in policies are protected and cannot be deleted.
+        if policy_id.startswith("builtin-"):
+            logger.info("Refusing to delete built-in policy: %s", policy_id)
+            return False
         del self.policies[policy_id]
         logger.info("Deleted policy: %s", policy_id)
         return True
@@ -611,6 +616,11 @@ class PolicyEngine:
         for policy in enabled_policies:
             # Check scope match
             if not policy.scope.matches(org, team, repo, branch):
+                continue
+            # When the evaluation explicitly targets a specific repository, skip
+            # repository-scoped policies that are not bound to a repository
+            # (i.e. global defaults are not enforced against an unrelated repo).
+            if repo and policy.scope.level == "repository" and not policy.scope.repository:
                 continue
 
             # Determine effective enforcement mode

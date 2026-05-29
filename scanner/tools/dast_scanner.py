@@ -25,7 +25,8 @@ import subprocess
 import urllib.parse
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
 
 import urllib.request
 
@@ -384,8 +385,8 @@ class URLSecurityScanner:
                     return headers, status, body
             except urllib.error.HTTPError as e:
                 return dict(e.headers), e.code, e.read().decode("utf-8", errors="ignore")
-            except Exception:
-                return {}, 0, ""
+            # Other errors (connection refused, DNS, timeout) propagate so the
+            # caller records a 'URL Scan Failed' finding.
 
         return await loop.run_in_executor(None, _fetch)
 
@@ -641,7 +642,7 @@ class URLSecurityScanner:
                 remediation="Add X-Frame-Options: DENY or CSP frame-ancestors directive",
                 url=url,
             ))
-        elif has_csp:
+        elif has_csp and not has_xframe:
             csp = headers_lower["content-security-policy"]
             if "frame-ancestors" not in csp:
                 findings.append(DASTFinding(
@@ -848,7 +849,7 @@ dynamic application security testing.
                             # Filter out common non-target URLs
                             if not any(
                                 x in match
-                                for x in ("example.com", "localhost", "127.0.0.1", "0.0.0.0", "test")
+                                for x in ("localhost", "127.0.0.1", "0.0.0.0")
                             ):
                                 # Truncate at common delimiters
                                 for delimiter in ('"', "'", "<", ">", " ", ",", ";"):

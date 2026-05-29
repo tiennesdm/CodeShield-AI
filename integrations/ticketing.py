@@ -19,6 +19,8 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import json
 import urllib.request
 from datetime import datetime, timezone
@@ -466,7 +468,38 @@ class TicketingIntegrationEngine:
     # Auto-Ticket Creation
     # ------------------------------------------------------------------
 
-    async def auto_create_for_critical(
+    @staticmethod
+    def _run_async(coro: Any) -> Any:
+        """Run a coroutine to completion from sync code, even inside a loop."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                return ex.submit(asyncio.run, coro).result()
+        return asyncio.run(coro)
+
+    def auto_create_for_critical(
+        self,
+        vulnerability: Dict[str, Any],
+        providers: Optional[List[str]] = None,
+    ) -> Dict[str, TicketInfo]:
+        """
+        Synchronous entry point. Non critical/high severities are skipped
+        immediately; otherwise the async core creates tickets across providers.
+        """
+        sev = (vulnerability.get("severity") or "").upper()
+        if sev not in ("CRITICAL", "HIGH"):
+            return {"skipped": TicketInfo(
+                ticket_id="skipped",
+                provider="none",
+                title="Not critical/high severity",
+                metadata={"reason": f"Severity {sev} does not meet threshold"},
+            )}
+        return self._run_async(self.acreate_for_critical(vulnerability, providers))
+
+    async def acreate_for_critical(
         self,
         vulnerability: Dict[str, Any],
         providers: Optional[List[str]] = None,

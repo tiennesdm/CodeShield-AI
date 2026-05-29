@@ -480,12 +480,20 @@ class AgentRegistry:
         while self._running:
             try:
                 await self._check_health()
-                await asyncio.sleep(self._health_check_interval)
+                # Sleep in small slices so runtime changes to the interval
+                # take effect promptly instead of being stuck in one long sleep.
+                slept = 0.0
+                while self._running and slept < self._health_check_interval:
+                    step = min(0.05, max(0.0, self._health_check_interval - slept))
+                    if step <= 0:
+                        break
+                    await asyncio.sleep(step)
+                    slept += step
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error("Health check error: %s", e)
-                await asyncio.sleep(self._health_check_interval)
+                await asyncio.sleep(min(self._health_check_interval, 0.5))
 
     async def _check_health(self) -> None:
         """Check health of all registered agents."""

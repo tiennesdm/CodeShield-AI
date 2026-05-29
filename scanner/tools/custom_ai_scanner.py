@@ -52,7 +52,10 @@ def is_high_entropy(string: str, threshold: float = 4.0) -> bool:
         return False
     if string in ("true", "false", "null", "undefined", "None", "True", "False"):
         return False
-    if re.match(r'^(x+|X+|0+|1+|a+|test|example|sample|dummy|placeholder)', string, re.I):
+    # Reject strings that are a single repeated character (e.g. 'aaaa...').
+    if re.fullmatch(r'(.)\\1+', string):
+        return False
+    if re.match(r'^(test|example|sample|dummy|placeholder)', string, re.I):
         return False
     return shannon_entropy(string) >= threshold
 
