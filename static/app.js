@@ -1587,6 +1587,11 @@ async function openInMonacoEditor(vulnId, event) {
 async function submitTriageFeedback(vulnId, verdict, event) {
   if (event) event.stopPropagation();
   
+  const vuln = currentState.vulnerabilities.find(v => v.id === vulnId);
+  const category = vuln ? vuln.category : null;
+  const codeSnippet = vuln ? vuln.code_snippet : null;
+  const description = vuln ? vuln.description : null;
+  
   const container = document.getElementById(`triage-feedback-container-${vulnId}`);
   try {
     const response = await fetch('/api/triage/feedback', {
@@ -1597,6 +1602,9 @@ async function submitTriageFeedback(vulnId, verdict, event) {
       body: JSON.stringify({
         vuln_id: vulnId,
         verdict: verdict,
+        category: category,
+        code_snippet: codeSnippet,
+        description: description,
         comment: 'User feedback from dashboard'
       })
     });

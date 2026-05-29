@@ -1417,6 +1417,9 @@ async def record_triage_feedback(
         entry = ai_triage_engine.record_feedback(
             vuln_id=vuln_id,
             verdict=verdict,
+            category=payload.get("category"),
+            code_snippet=payload.get("code_snippet"),
+            description=payload.get("description"),
             user_comment=comment,
         )
         return {"status": "success", "recorded": entry}

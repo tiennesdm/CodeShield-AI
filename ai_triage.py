@@ -176,6 +176,9 @@ class AITriageEngine:
         self,
         vuln_id: str,
         verdict: str,
+        category: Optional[str] = None,
+        code_snippet: Optional[str] = None,
+        description: Optional[str] = None,
         user_comment: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
@@ -184,6 +187,9 @@ class AITriageEngine:
         Args:
             vuln_id: Vulnerability ID
             verdict: 'confirmed_tp' or 'confirmed_fp'
+            category: Vulnerability category
+            code_snippet: Vulnerable code snippet
+            description: Vulnerability description
             user_comment: Optional user comment
 
         Returns:
@@ -194,13 +200,15 @@ class AITriageEngine:
         entry = {
             "vuln_id": vuln_id,
             "verdict": verdict,
+            "category": category,
+            "code_snippet": code_snippet,
+            "description": description,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "comment": user_comment,
         }
 
         if verdict == "confirmed_fp":
             feedback["false_positives"].append(entry)
-            # Also add the pattern to known FP patterns for future
             feedback.setdefault("fp_vuln_ids", []).append(vuln_id)
         else:
             feedback["confirmations"].append(entry)
@@ -211,6 +219,28 @@ class AITriageEngine:
 
         logger.info("Recorded %s feedback for vulnerability %s", verdict, vuln_id)
         return entry
+
+    def _is_similar_code(self, code1: Optional[str], code2: Optional[str]) -> bool:
+        """Check if two code snippets are semantically/structurally similar."""
+        if not code1 or not code2:
+            return False
+        # Normalize code (remove whitespace, comments, convert to lowercase)
+        c1 = re.sub(r"\s+", "", code1).lower()
+        c2 = re.sub(r"\s+", "", code2).lower()
+        if not c1 or not c2:
+            return False
+        # Check if identical or substrings
+        if c1 == c2 or c1 in c2 or c2 in c1:
+            return True
+        # Token set overlap (Jaccard similarity)
+        t1 = set(re.findall(r"\w+", code1.lower()))
+        t2 = set(re.findall(r"\w+", code2.lower()))
+        if not t1 or not t2:
+            return False
+        intersection = t1.intersection(t2)
+        union = t1.union(t2)
+        jaccard = len(intersection) / len(union)
+        return jaccard > 0.75  # 75% token overlap threshold
 
     async def triage_vulnerabilities(
         self,
@@ -243,11 +273,13 @@ class AITriageEngine:
         feedback = self._load_feedback()
         fp_vuln_ids = set(feedback.get("fp_vuln_ids", []))
         tp_vuln_ids = set(feedback.get("tp_vuln_ids", []))
+        false_positives_entries = feedback.get("false_positives", [])
+        confirmations_entries = feedback.get("confirmations", [])
 
         triaged: List[Vulnerability] = []
 
         for vuln in vulnerabilities:
-            # Check organizational learning first
+            # Check organizational learning first (strict ID matches)
             if vuln.id in fp_vuln_ids:
                 vuln.confidence = "LOW"
                 vuln.description = f"[LIKELY FALSE POSITIVE - previously flagged] {vuln.description}"
@@ -255,6 +287,30 @@ class AITriageEngine:
                 continue
 
             if vuln.id in tp_vuln_ids:
+                vuln.confidence = "HIGH"
+                triaged.append(vuln)
+                continue
+
+            # Check self-learning pattern/similarity matches from user feedback
+            is_learned_fp = False
+            for fp in false_positives_entries:
+                if fp.get("category") == vuln.category and self._is_similar_code(fp.get("code_snippet"), vuln.code_snippet):
+                    is_learned_fp = True
+                    break
+
+            if is_learned_fp:
+                vuln.confidence = "LOW"
+                vuln.description = f"[LIKELY FALSE POSITIVE - learned from feedback] {vuln.description}"
+                triaged.append(vuln)
+                continue
+
+            is_learned_tp = False
+            for tp in confirmations_entries:
+                if tp.get("category") == vuln.category and self._is_similar_code(tp.get("code_snippet"), vuln.code_snippet):
+                    is_learned_tp = True
+                    break
+
+            if is_learned_tp:
                 vuln.confidence = "HIGH"
                 triaged.append(vuln)
                 continue
