@@ -9,6 +9,7 @@ Implements a pub/sub pattern for agent communication with:
 """
 
 import asyncio
+import itertools
 import json
 import os
 import time
@@ -214,6 +215,9 @@ class AgentCommunicationBus:
         self._priority_queue: asyncio.PriorityQueue = asyncio.PriorityQueue(
             maxsize=max_queue_size
         )
+        # Monotonic tiebreaker so equal-priority messages are never compared
+        # against each other (AgentMessage is not orderable).
+        self._seq = itertools.count()
         self._message_history: List[AgentMessage] = []
         self._max_history = 5000
         self._lock = asyncio.Lock()
@@ -271,7 +275,7 @@ class AgentCommunicationBus:
 
         # Add to priority queue (lower priority number = higher urgency)
         try:
-            await self._priority_queue.put((message.priority.value, message))
+            await self._priority_queue.put((message.priority.value, next(self._seq), message))
             logger.debug(
                 "Message %s from %s queued (type=%s, priority=%s)",
                 message.message_id,
@@ -317,7 +321,7 @@ class AgentCommunicationBus:
         """Main dispatch loop that processes the priority queue."""
         while self._running:
             try:
-                _, message = await asyncio.wait_for(
+                _, _, message = await asyncio.wait_for(
                     self._priority_queue.get(), timeout=1.0
                 )
                 await self._dispatch(message)
@@ -327,6 +331,7 @@ class AgentCommunicationBus:
                 break
             except Exception as e:
                 logger.error("Error in dispatch loop: %s", e, exc_info=True)
+                await asyncio.sleep(0.05)
 
     async def _dispatch(self, message: AgentMessage) -> None:
         """Dispatch a message to all relevant subscribers."""
