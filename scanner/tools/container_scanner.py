@@ -1146,7 +1146,11 @@ class ContainerScanner:
                 category=f"Container/IaC: {f.rule_name}",
                 cwe_id=f.cwe,
                 cwe_name=f.rule_name,
-                title=f.rule_name,
+                title=(
+                    f"{f.rule_name}: {f.resource}"
+                    if f.resource and len(f.resource) < 80
+                    else f.rule_name
+                ),
                 description=f"[{f.policy_id}] {f.description}\n\nResource: {f.resource}",
                 code_snippet=f.resource,
                 fix_suggestion=f.remediation,

@@ -6,6 +6,7 @@ Terraform scanning, Helm chart scanning, and policy engine.
 """
 
 import os
+import re
 import tempfile
 from pathlib import Path
 
