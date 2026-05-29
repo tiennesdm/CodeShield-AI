@@ -1095,7 +1095,22 @@ function renderFindingsList(findings) {
             </div>
           </div>
 
-          <div class="finding-tool-tag">Scanner: ${vuln.tool_source}</div>
+          <!-- AI Triage Feedback Box -->
+          <div class="triage-feedback-container" id="triage-feedback-container-${vuln.id}" style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+              <span style="font-size: 13px; font-weight: 600; color: var(--color-text-main);">AI Triage Feedback:</span>
+              <div style="display: flex; gap: 8px;">
+                <button class="action-btn" style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981; padding: 4px 8px; font-size: 11px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;" onclick="submitTriageFeedback('${vuln.id}', 'confirmed_tp', event)">
+                  <i data-feather="check" style="width: 12px; height: 12px;"></i> Confirm Vulnerability
+                </button>
+                <button class="action-btn" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 4px 8px; font-size: 11px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;" onclick="submitTriageFeedback('${vuln.id}', 'confirmed_fp', event)">
+                  <i data-feather="x" style="width: 12px; height: 12px;"></i> Flag False Positive
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="finding-tool-tag" style="margin-top: 12px;">Scanner: ${vuln.tool_source}</div>
         </div>
       </div>
     `;
@@ -1563,6 +1578,42 @@ async function openInMonacoEditor(vulnId, event) {
       });
     } else {
       alert("Failed to fetch file content.");
+    }
+  } catch (err) {
+    alert("Connection error: " + err.message);
+  }
+}
+
+async function submitTriageFeedback(vulnId, verdict, event) {
+  if (event) event.stopPropagation();
+  
+  const container = document.getElementById(`triage-feedback-container-${vulnId}`);
+  try {
+    const response = await fetch('/api/triage/feedback', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        vuln_id: vulnId,
+        verdict: verdict,
+        comment: 'User feedback from dashboard'
+      })
+    });
+    
+    if (response.ok) {
+      container.innerHTML = `
+        <div style="font-size: 12px; color: #10b981; display: flex; align-items: center; gap: 6px; padding: 4px 0;">
+          <i data-feather="check-circle" style="width: 14px; height: 14px;"></i> Feedback recorded! The AI triager will remember this for future scans.
+        </div>
+      `;
+      if (window.feather) {
+        try {
+          feather.replace();
+        } catch (e) {}
+      }
+    } else {
+      alert("Failed to submit feedback.");
     }
   } catch (err) {
     alert("Connection error: " + err.message);

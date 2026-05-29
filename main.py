@@ -1399,6 +1399,32 @@ async def run_ai_triage(scan_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"AI triage failed: {str(e)}")
 
 
+@app.post("/api/triage/feedback")
+async def record_triage_feedback(
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Record user triage feedback for organizational learning.
+    """
+    vuln_id = payload.get("vuln_id")
+    verdict = payload.get("verdict")  # 'confirmed_tp' or 'confirmed_fp'
+    comment = payload.get("comment", "")
+
+    if not vuln_id or not verdict:
+        raise HTTPException(status_code=400, detail="vuln_id and verdict are required")
+
+    try:
+        entry = ai_triage_engine.record_feedback(
+            vuln_id=vuln_id,
+            verdict=verdict,
+            user_comment=comment,
+        )
+        return {"status": "success", "recorded": entry}
+    except Exception as e:
+        logger.error("Failed to record triage feedback: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # =============================================================================
 # Auto-Fix Endpoints
 # =============================================================================
