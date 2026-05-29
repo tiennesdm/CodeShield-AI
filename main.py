@@ -554,6 +554,7 @@ async def scan_github(request: ScanRequest) -> Dict[str, Any]:
             name=scan_name,
             config=request.config,
             db=db,
+            source_url=request.source_url,
         )
     )
     active_scans[scan_id] = task
@@ -583,6 +584,7 @@ async def _run_scan_with_cleanup(
     name: str,
     config: Any,
     db: JSONDatabase,
+    source_url: Optional[str] = None,
 ) -> None:
     """Run a scan and clean up temp files afterward."""
     try:
@@ -593,6 +595,7 @@ async def _run_scan_with_cleanup(
             name=name,
             config=config,
             db=db,
+            source_url=source_url,
         )
     finally:
         # Clean up extracted source files after scan completes/fails
