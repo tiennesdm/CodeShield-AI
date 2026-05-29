@@ -622,14 +622,15 @@ async def _run_scan_with_cleanup(
             db=db,
             source_url=source_url,
         )
-    finally:
-        # Clean up extracted source files after scan completes/fails
+    except Exception as e:
+        # Clean up extracted source files on failure
         if source_path and os.path.exists(source_path):
             try:
                 shutil.rmtree(source_path, ignore_errors=True)
-                logger.debug("Cleaned up source path for scan %s: %s", scan_id, source_path)
-            except Exception as e:
-                logger.warning("Failed to cleanup source path for scan %s: %s", scan_id, e)
+                logger.debug("Cleaned up source path for failed scan %s: %s", scan_id, source_path)
+            except Exception as ex:
+                logger.warning("Failed to cleanup source path for failed scan %s: %s", scan_id, ex)
+        raise e
 
 
 def _validate_scan_id(scan_id: str) -> None:
@@ -1458,6 +1459,15 @@ async def get_scan_file(
     target_path = os.path.abspath(os.path.join(base_dir, file_path))
     if not target_path.startswith(base_dir):
         raise HTTPException(status_code=400, detail="Invalid file path")
+        
+    if not os.path.exists(target_path) or not os.path.isfile(target_path):
+        if scan.source_type == "github" and scan.source_url:
+            try:
+                from scanner.github_handler import GitHubHandler
+                gh = GitHubHandler()
+                await gh.clone_repository(scan.source_url, scan_id)
+            except Exception as e:
+                logger.error("Failed to re-clone repository for file fetch: %s", e)
         
     if not os.path.exists(target_path) or not os.path.isfile(target_path):
         raise HTTPException(status_code=404, detail="File not found")
