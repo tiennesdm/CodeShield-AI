@@ -3183,7 +3183,7 @@ async def configure_pagerduty_integration(request: Dict[str, Any]) -> Dict[str, 
 @app.post("/api/integrations/ticketing/auto-create")
 async def auto_create_tickets(request: Dict[str, Any]) -> Dict[str, Any]:
     """Automatically create tickets for critical/high vulnerabilities."""
-    results = await ticketing_engine.auto_create_for_critical(
+    results = await ticketing_engine.acreate_for_critical(
         vulnerability=request.get("vulnerability", {}),
         providers=request.get("providers"),
     )
