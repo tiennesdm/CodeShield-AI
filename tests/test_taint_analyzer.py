@@ -12,6 +12,7 @@ import tempfile
 
 import pytest
 
+from scanner.tools.reachability_analyzer import CallGraphBuilder
 from scanner.tools.taint_analyzer import (
     ALL_SOURCE_PATTERNS,
     SANITIZER_PATTERNS,
