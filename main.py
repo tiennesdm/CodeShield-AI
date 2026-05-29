@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
 from database.json_db import JSONDatabase
 from database import get_database
@@ -204,6 +204,19 @@ notification_engine = get_notification_engine()
 # =============================================================================
 # Health & Info Endpoints
 # =============================================================================
+
+@app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
+async def dashboard_page() -> HTMLResponse:
+    """Server-rendered scan history & stats dashboard."""
+    try:
+        from exporters.dashboard import DashboardRenderer
+        stats = await db.get_stats()
+        scans = await db.list_scans(limit=50)
+        return HTMLResponse(DashboardRenderer().render(stats, scans))
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error("Dashboard render failed: %s", e)
+        return HTMLResponse("<h1>Dashboard unavailable</h1>", status_code=500)
+
 
 @app.get("/api/health")
 async def health_check() -> Dict[str, Any]:
