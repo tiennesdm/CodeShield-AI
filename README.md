@@ -21,6 +21,47 @@ A comprehensive, production-ready FastAPI-based code vulnerability scanning engi
 - **Path Traversal Protection**: Secure file handling with sanitized paths
 - **Graceful Degradation**: Scans continue even if some tools are not installed
 
+## Agentic AI, LLM Providers & Responsible AI
+
+Beyond security scanning, the platform now includes a general-purpose **agentic
+AI** stack with Responsible AI baked in. See the docs for the full design:
+
+- **[Agentic AI Architecture](docs/AGENTIC_AI_ARCHITECTURE.md)** — system design, diagrams, request lifecycle.
+- **[Responsible AI](docs/RESPONSIBLE_AI.md)** — principles → controls map, policy, model card.
+- **[AWS EC2 Deployment + Claude CLI](docs/DEPLOYMENT_AWS_EC2.md)** — hands-on setup.
+
+Three composable subsystems:
+
+| Package | What it provides |
+| --- | --- |
+| `llm/` | Swappable LLM provider layer: **Claude CLI**, Anthropic API, OpenAI API, and an offline mock — selected via `get_llm_provider()` / `CODESHIELD_LLM_PROVIDER`. |
+| `governance/` | Responsible AI governor enforcing **PII/secret redaction, prompt-injection guards, bias screening, a hash-chained audit trail**, and a declarative policy. |
+| `ai_team/` | An agentic **"AI team"** (Planner, Researcher, Engineer, Reviewer, Responsible-AI Officer) coordinated to accomplish a goal — every LLM call routed through the governor. |
+
+Run a governed AI team from the terminal (works offline via the mock provider):
+
+```bash
+python -m ai_team.cli "Design a secure rate limiter for our public API"
+python -m ai_team.cli --provider claude_cli --strict "Audit our login flow"
+```
+
+Or via the API (mounted in the main app):
+
+```
+GET  /api/ai-team/info            POST /api/ai-team/run
+POST /api/governance/ask          POST /api/governance/redact
+POST /api/governance/inspect-prompt   POST /api/governance/bias-scan
+GET  /api/governance/policy       GET  /api/governance/audit
+```
+
+Configuration:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CODESHIELD_LLM_PROVIDER` | auto-detect | `claude_cli`, `anthropic_api`, `openai_api`, or `mock` |
+| `ANTHROPIC_API_KEY` | – | API key for `anthropic_api` |
+| `OPENAI_API_KEY` | – | API key for `openai_api` |
+
 ## Architecture
 
 ```
