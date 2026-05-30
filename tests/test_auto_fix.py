@@ -324,8 +324,9 @@ class TestCORSFix:
         self, fix_engine_no_llm: AutoFixEngine, sample_cors: Vulnerability
     ) -> None:
         """Should generate fix for CORS wildcard."""
-        result = await fix_engine_no_llm.generate_fix(sample_cors)
-        assert result.status in (FixStatus.SUCCESS, FixStatus.NO_FIX_AVAILABLE)
+        with patch("governance.assist.governed_complete", side_effect=Exception("No LLM available")):
+            result = await fix_engine_no_llm.generate_fix(sample_cors)
+            assert result.status in (FixStatus.SUCCESS, FixStatus.NO_FIX_AVAILABLE)
 
     def test_apply_cors_fix(self, fix_engine_no_llm: AutoFixEngine) -> None:
         """Should replace wildcard with specific origin."""
