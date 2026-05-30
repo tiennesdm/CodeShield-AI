@@ -21,6 +21,7 @@ from llm.base import LLMProvider
 from llm.claude_cli import ClaudeCLIProvider
 from llm.mock import MockLLMProvider
 from llm.openai_api import OpenAIAPIProvider
+from llm.ollama import OllamaProvider
 
 logger = get_logger(__name__)
 
@@ -28,11 +29,18 @@ PROVIDER_REGISTRY: Dict[str, Type[LLMProvider]] = {
     "claude_cli": ClaudeCLIProvider,
     "anthropic_api": AnthropicAPIProvider,
     "openai_api": OpenAIAPIProvider,
+    "ollama": OllamaProvider,
     "mock": MockLLMProvider,
 }
 
 # Order used when no provider is explicitly requested.
-AUTODETECT_ORDER: List[str] = ["claude_cli", "anthropic_api", "openai_api", "mock"]
+AUTODETECT_ORDER: List[str] = [
+    "claude_cli",
+    "anthropic_api",
+    "openai_api",
+    "ollama",
+    "mock",
+]
 
 
 # Cache resolved availability of LLM providers to avoid redundant slow path scans

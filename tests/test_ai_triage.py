@@ -405,10 +405,11 @@ class TestLLMTriageFallback:
         sample_vulnerability_sql: Vulnerability,
     ) -> None:
         """Should gracefully handle missing LLM."""
-        result = await triage_engine_no_llm._llm_triage(
-            sample_vulnerability_sql, sample_vulnerability_sql.code_snippet or ""
-        )
-        assert result is None  # No LLM client available
+        with patch("governance.assist.governed_complete", side_effect=Exception("No LLM available")):
+            result = await triage_engine_no_llm._llm_triage(
+                sample_vulnerability_sql, sample_vulnerability_sql.code_snippet or ""
+            )
+            assert result is None  # No LLM client available
 
 
 class TestBuildPrompt:

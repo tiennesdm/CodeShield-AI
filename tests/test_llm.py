@@ -58,7 +58,7 @@ def test_usage_totals():
 
 def test_available_providers():
     names = available_providers()
-    assert {"claude_cli", "anthropic_api", "openai_api", "mock"} <= set(names)
+    assert {"claude_cli", "anthropic_api", "openai_api", "ollama", "mock"} <= set(names)
 
 
 def test_factory_falls_back_to_mock(monkeypatch):
@@ -118,3 +118,62 @@ def test_claude_cli_parse_plaintext_output():
     resp = provider._parse_output("just text", "claude-x", 100)
     assert resp.content == "just text"
     assert resp.usage.completion_tokens > 0
+
+
+from unittest.mock import AsyncMock, MagicMock, patch
+from llm.ollama import OllamaProvider
+
+
+async def test_ollama_provider_availability(monkeypatch):
+    provider = OllamaProvider()
+    
+    with patch.object(provider, "_check_ollama_port", return_value=True):
+        assert await provider.is_available() is True
+        assert provider.is_available_sync() is True
+
+    with patch.object(provider, "_check_ollama_port", return_value=False):
+        assert await provider.is_available() is False
+        assert provider.is_available_sync() is False
+
+
+async def test_ollama_provider_complete():
+    provider = OllamaProvider()
+    
+    mock_resp_tags = MagicMock()
+    mock_resp_tags.status_code = 200
+    mock_resp_tags.json.return_value = {
+        "models": [
+            {"name": "qwen2.5:0.5b"},
+            {"name": "llama3:latest"}
+        ]
+    }
+    
+    mock_resp_chat = MagicMock()
+    mock_resp_chat.status_code = 200
+    mock_resp_chat.json.return_value = {
+        "message": {"content": "Hello from local Ollama"},
+        "prompt_eval_count": 10,
+        "eval_count": 5
+    }
+    
+    async_client_mock = AsyncMock()
+    async_client_mock.get.return_value = mock_resp_tags
+    async_client_mock.post.return_value = mock_resp_chat
+    
+    # Enter the async context manager mock
+    async_client_mock.__aenter__.return_value = async_client_mock
+    async_client_mock.__aexit__.return_value = None
+    
+    with patch("httpx.AsyncClient", return_value=async_client_mock):
+        resp = await provider.ask("Hello", system="Act like a helper")
+        assert resp.content == "Hello from local Ollama"
+        assert resp.provider == "ollama"
+        assert resp.model == "qwen2.5:0.5b"
+        assert resp.usage.prompt_tokens == 10
+        assert resp.usage.completion_tokens == 5
+
+        async_client_mock.post.assert_called_once()
+        args, kwargs = async_client_mock.post.call_args
+        assert kwargs["json"]["model"] == "qwen2.5:0.5b"
+        assert kwargs["json"]["messages"][0] == {"role": "system", "content": "Act like a helper"}
+
