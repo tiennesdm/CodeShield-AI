@@ -142,6 +142,7 @@ def main():
 
     lines = content.split("\n")
     in_code_block = False
+    code_block_lang = ""
     code_text = []
 
     for line in lines:
@@ -151,11 +152,17 @@ def main():
         if stripped.startswith("```"):
             if in_code_block:
                 in_code_block = False
+                if code_block_lang == "mermaid":
+                    code_text = []
+                    continue
                 code_content = "\n".join(code_text)
+                # Clean up unicode box-drawing characters for Courier
+                code_content = code_content.replace("├──", "|--").replace("└──", "`--").replace("│", "|")
                 story.append(Preformatted(code_content, code_style))
                 code_text = []
             else:
                 in_code_block = True
+                code_block_lang = stripped[3:].strip().lower()
             continue
             
         if in_code_block:
