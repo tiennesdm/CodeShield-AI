@@ -17,7 +17,7 @@ from reportlab.platypus import (
 
 def main():
     pdf_path = "/Users/shubhammehta/Documents/New project/ai-code-sheild/project_architecture_beginner.pdf"
-    image_path = "/Users/shubhammehta/.gemini/antigravity/brain/5c87f215-c1e1-47fd-be3c-2687d241665e/project_architecture_1779809078222.png"
+    image_path = "/Users/shubhammehta/.gemini/antigravity/brain/5c87f215-c1e1-47fd-be3c-2687d241665e/project_architecture_governance_1780115060062.png"
     
     doc = SimpleDocTemplate(
         pdf_path,
