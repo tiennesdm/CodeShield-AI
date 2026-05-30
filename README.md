@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-1025%20passing-3fb950)
+![Tests](https://img.shields.io/badge/tests-1085%20passing-3fb950)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 CodeShield AI ingests code via ZIP upload or GitHub URL, auto-detects languages, runs the appropriate security scanners in parallel (coordinated by a multi-agent orchestrator), validates findings with AI triage, and produces structured results plus self-contained PDF/HTML reports.
@@ -39,6 +39,7 @@ CodeShield AI ingests code via ZIP upload or GitHub URL, auto-detects languages,
 
 ### Intelligence & automation
 - **Multi-agent orchestrator (HAL)**: coordinates SAST / DAST / secrets / SCA / taint / LLM agents across phases
+- **Generic Git & Custom Branch support**: clones and scans specific branches of GitHub, GitLab, and Bitbucket repositories
 - **AI triage**: hybrid heuristics plus optional LLM to cut false positives
 - **Auto-fix**: deterministic and LLM-assisted remediation with unified diffs
 - **Agentic "AI team"**: role-based agents (Planner, Researcher, Engineer, Reviewer, Responsible-AI Officer) — see below
@@ -55,7 +56,8 @@ CodeShield AI ingests code via ZIP upload or GitHub URL, auto-detects languages,
 Beyond security scanning, the platform now includes a general-purpose **agentic
 AI** stack with Responsible AI baked in. See the docs for the full design:
 
-- **[Agentic AI Architecture](docs/AGENTIC_AI_ARCHITECTURE.md)** — system design, diagrams, request lifecycle.
+- **[System Architecture & Data Flow](docs/project_architecture.md)** — complete diagrams (system block diagram & sequence execution chart) detailing the AIGovernor and LLM provider integration.
+- **[Agentic AI Architecture](docs/AGENTIC_AI_ARCHITECTURE.md)** — system design, diagrams, request lifecycle of the AI agent team.
 - **[Responsible AI](docs/RESPONSIBLE_AI.md)** — principles → controls map, policy, model card.
 - **[AWS EC2 Deployment + Claude CLI](docs/DEPLOYMENT_AWS_EC2.md)** — hands-on setup.
 
