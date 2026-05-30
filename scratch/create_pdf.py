@@ -16,9 +16,9 @@ from reportlab.platypus import (
 )
 
 def main():
-    md_path = "/Users/shubhammehta/.gemini/antigravity/brain/5c87f215-c1e1-47fd-be3c-2687d241665e/project_architecture.md"
+    md_path = "/Users/shubhammehta/Documents/New project/ai-code-sheild/docs/project_architecture.md"
     pdf_path = "/Users/shubhammehta/Documents/New project/ai-code-sheild/project_architecture.pdf"
-    image_path = "/Users/shubhammehta/.gemini/antigravity/brain/5c87f215-c1e1-47fd-be3c-2687d241665e/project_architecture_governance_1780115060062.png"
+    image_path = "/Users/shubhammehta/Documents/New project/ai-code-sheild/docs/images/project_architecture_governance.png"
     
     if not os.path.exists(md_path):
         print(f"Error: {md_path} not found.")
