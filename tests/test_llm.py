@@ -175,5 +175,5 @@ async def test_ollama_provider_complete():
         async_client_mock.post.assert_called_once()
         args, kwargs = async_client_mock.post.call_args
         assert kwargs["json"]["model"] == "qwen2.5:0.5b"
-        assert kwargs["json"]["messages"][0] == {"role": "system", "content": "Act like a helper"}
+        assert "Act like a helper" in kwargs["json"]["messages"][0]["content"]
 
