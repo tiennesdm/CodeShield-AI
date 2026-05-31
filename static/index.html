@@ -287,6 +287,21 @@
                 <div class="agent-grid" id="agent-swarm-grid">
                   <!-- Dynamically populated agents -->
                 </div>
+                <!-- Real-time Agent Swarm Metrics Subpanel -->
+                <div class="swarm-metrics-panel" style="margin-top: 16px; padding: 12px; background: rgba(18, 20, 32, 0.25); border: 1px dashed var(--border-light); border-radius: 8px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: center;">
+                  <div class="metric-box">
+                    <span style="display: block; font-size: 10px; text-transform: uppercase; color: var(--color-text-dark); margin-bottom: 4px;">Total Messages</span>
+                    <span id="swarm-metric-messages" style="font-size: 18px; font-weight: 700; color: #6366f1;">0</span>
+                  </div>
+                  <div class="metric-box">
+                    <span style="display: block; font-size: 10px; text-transform: uppercase; color: var(--color-text-dark); margin-bottom: 4px;">Active Agents</span>
+                    <span id="swarm-metric-active" style="font-size: 18px; font-weight: 700; color: #10b981;">0 / 10</span>
+                  </div>
+                  <div class="metric-box">
+                    <span style="display: block; font-size: 10px; text-transform: uppercase; color: var(--color-text-dark); margin-bottom: 4px;">Triage Deduplication Rate</span>
+                    <span id="swarm-metric-dedup" style="font-size: 18px; font-weight: 700; color: #f59e0b;">0%</span>
+                  </div>
+                </div>
               </div>
               
               <div class="console-box">
@@ -422,7 +437,7 @@
           </div>
 
           <!-- Analytics Section -->
-          <div class="analytics-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px;">
+          <div class="analytics-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-bottom: 24px;">
             <div class="card" style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;">
               <h4 style="margin-bottom: 16px; font-family: var(--font-title); font-size: 16px; color: var(--color-text-main);">Vulnerability Distribution</h4>
               <div style="height: 220px; position: relative;">
@@ -433,6 +448,12 @@
               <h4 style="margin-bottom: 16px; font-family: var(--font-title); font-size: 16px; color: var(--color-text-main);">Vulnerabilities by Category</h4>
               <div style="height: 220px; position: relative;">
                 <canvas id="category-chart"></canvas>
+              </div>
+            </div>
+            <div class="card" style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;">
+              <h4 style="margin-bottom: 16px; font-family: var(--font-title); font-size: 16px; color: var(--color-text-main);">Risk Level vs. Tool Activity</h4>
+              <div style="height: 220px; position: relative;">
+                <canvas id="risk-trend-chart"></canvas>
               </div>
             </div>
           </div>

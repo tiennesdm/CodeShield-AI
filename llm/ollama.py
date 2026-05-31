@@ -105,9 +105,20 @@ class OllamaProvider(LLMProvider):
         if model == self.default_model or not model:
             model = await self._detect_model()
 
+        # Optimize message prompts for local coder models
+        optimized_messages = []
+        is_coder_model = any(preset in model.lower() for preset in ["coder", "code", "llama3", "qwen2.5"])
+        
+        for msg in messages:
+            content = msg.content
+            # If it's a system message and we are targeting a coder model, add strict syntax instructions
+            if msg.role == "system" and is_coder_model:
+                content += "\nStrict compliance instructions: Return ONLY valid, syntactically correct outputs (e.g., JSON, YAML, or unified diffs) when requested. Avoid any preamble, conversational greeting, or explanations. If writing code or diffs, ensure no markdown formatting errors."
+            optimized_messages.append(LLMMessage(role=msg.role, content=content))
+
         body = {
             "model": model,
-            "messages": [m.to_dict() for m in messages],
+            "messages": [m.to_dict() for m in optimized_messages],
             "stream": False,
             "options": {
                 "temperature": kwargs.get("temperature", self.temperature),

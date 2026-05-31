@@ -417,6 +417,10 @@ PATH_TRAVERSAL_PATTERNS = [
     (r"(?i)(new\s+File\s*\(\s*.*\+.*req\.(params|query))", "Path Traversal via File constructor", "CWE-22", "HIGH"),
     (r"(?i)(Paths\.get\s*\(\s*.*\+.*req\.(params|query))", "Path Traversal via Paths.get()", "CWE-22", "HIGH"),
     (r"(?i)(send_from_directory\s*\(\s*.*\+.*req\.(params|query))", "Path Traversal via send_from_directory", "CWE-22", "HIGH"),
+    (r"(?i)(os\.path\.join\s*\(.*req\.(params|query|body))", "Python Path Traversal via os.path.join", "CWE-22", "HIGH"),
+    (r"(?i)(path\.join\s*\(.*req\.(params|query|body))", "Node.js Path Traversal via path.join", "CWE-22", "HIGH"),
+    (r"(?i)(path\.resolve\s*\(.*req\.(params|query|body))", "Node.js Path Traversal via path.resolve", "CWE-22", "HIGH"),
+    (r"(?i)(filepath\.Join\s*\(.*req\.(params|query|body))", "Go Path Traversal via filepath.Join", "CWE-22", "HIGH"),
 ]
 
 # Crypto Weakness Patterns
@@ -451,6 +455,9 @@ SSRF_PATTERNS = [
     (r"(?i)(axios\.(get|post)\s*\(\s*.*\+.*\+.*\))", "Potential SSRF via axios", "CWE-918", "MEDIUM"),
     (r"(?i)(curl\s+.*\$\w+)", "Potential SSRF via curl", "CWE-918", "HIGH"),
     (r"(?i)(urllib\.urlopen\s*\(\s*.*\+.*\))", "Potential SSRF (Python 2)", "CWE-918", "HIGH"),
+    (r"(?i)(http\.get\s*\(\s*req\.(query|params|body))", "Node.js Potential SSRF via http.get", "CWE-918", "HIGH"),
+    (r"(?i)(https\.request\s*\(\s*req\.(query|params|body))", "Node.js Potential SSRF via https.request", "CWE-918", "HIGH"),
+    (r"(?i)(http\.Get\s*\(\s*fmt\.Sprintf\s*\()", "Go Potential SSRF via http.Get", "CWE-918", "HIGH"),
 ]
 
 # ReDoS Patterns
@@ -477,6 +484,16 @@ HEADER_PATTERNS = [
     (r"(?i)(Server\s*:\s*.*\d+\.\d+)", "Server Version Disclosure", "CWE-200", "LOW"),
 ]
 
+# Deserialization Patterns
+DESERIALIZATION_PATTERNS = [
+    (r"(?i)(pickle\.loads\s*\()", "Python Insecure Deserialization (pickle.loads)", "CWE-502", "CRITICAL"),
+    (r"(?i)(yaml\.unsafe_load\s*\()", "Python Insecure Deserialization (yaml.unsafe_load)", "CWE-502", "CRITICAL"),
+    (r"(?i)(shelve\.open\s*\()", "Python Insecure Deserialization (shelve)", "CWE-502", "HIGH"),
+    (r"(?i)(unserialize\s*\()", "Node.js/PHP Insecure Deserialization (unserialize)", "CWE-502", "CRITICAL"),
+    (r"(?i)(XMLDecoder\s*\()", "Java Insecure Deserialization (XMLDecoder)", "CWE-502", "CRITICAL"),
+    (r"(?i)(ObjectInputStream\s*\()", "Java ObjectInputStream Deserialization", "CWE-502", "CRITICAL"),
+]
+
 # Combine all patterns
 ALL_PATTERNS = (
     AWS_PATTERNS + GCP_PATTERNS + AZURE_PATTERNS + IBM_CLOUD_PATTERNS
@@ -486,6 +503,7 @@ ALL_PATTERNS = (
     + INJECTION_PATTERNS + XSS_PATTERNS + PATH_TRAVERSAL_PATTERNS
     + CRYPTO_WEAKNESS_PATTERNS + CORS_PATTERNS + SSRF_PATTERNS
     + REDOS_PATTERNS + AUTH_PATTERNS + HEADER_PATTERNS
+    + DESERIALIZATION_PATTERNS
 )
 
 # OWASP category mapping
@@ -496,7 +514,7 @@ OWASP_MAP = {
     "CWE-330": "A02", "CWE-918": "A10", "CWE-352": "A01", "CWE-346": "A05",
     "CWE-614": "A05", "CWE-1004": "A05", "CWE-200": "A05", "CWE-209": "A05",
     "CWE-400": "A04", "CWE-943": "A03", "CWE-95": "A03", "CWE-601": "A01",
-    "CWE-97": "A03", "CWE-1104": "A06",
+    "CWE-97": "A03", "CWE-1104": "A06", "CWE-502": "A08",
 }
 
 
